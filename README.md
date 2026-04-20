@@ -32,3 +32,5 @@ After making changes, run `npm run build` again and click the refresh icon on th
 - log installs and connections to database
 
 - Fix connection info, only ever shows "connected"
+
+- get coverage check to work
