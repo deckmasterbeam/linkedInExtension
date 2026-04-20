@@ -1,5 +1,5 @@
 import "./viewer.css";
-import { type StoredProfile, STORAGE_PREFIX } from "../content/profileCache";
+import { type StoredProfile, STORAGE_PREFIX } from "../shared/profileCache";
 import { renderProfileContent } from "../shared/profileCard";
 import { resolveImageBuffer } from "../shared/imageCache";
 
