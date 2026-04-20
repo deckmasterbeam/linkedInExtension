@@ -21,10 +21,14 @@ After making changes, run `npm run build` again and click the refresh icon on th
 
 - The "recommended for you" section totally doesn't work
 
-- Use the profile pic from the current page while waiting for data to load, but then use the pic from the loaded profile
+- Use the profile pic from the current page while waiting for data to load, but then use the pic from the loaded profile (connected to the "recommended for you" problem)
 
 - Figure out how to publish this on the chrome store
 
 - Write a post on linkedIn about this
 
 - LinkedIn supported this behavior for people and companies. Also add this behavior for companies
+
+- log installs and connections to database
+
+- Fix connection info, only ever shows "connected"
