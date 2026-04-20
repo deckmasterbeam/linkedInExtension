@@ -7,7 +7,7 @@ const MiniCssExtractPlugin = require("mini-css-extract-plugin");
 module.exports = {
   entry: {
     // Each entry point becomes its own output bundle
-    "popup/popup": "./src/popup/popup.ts",
+    "extensionWindow/extensionWindow": "./src/extensionWindow/extensionWindow.ts",
     background: "./src/background/background.ts",
     content: "./src/content/content.ts",
     viewer: "./src/viewer/viewer.ts",
@@ -48,9 +48,9 @@ module.exports = {
 
     // Generate popup/popup.html in dist — inject the bundled JS automatically
     new HtmlWebpackPlugin({
-      template: "./src/popup/popup.html",
-      filename: "popup/popup.html",
-      chunks: ["popup/popup"],
+      template: "./src/extensionWindow/extensionWindow.html",
+      filename: "extensionWindow.html",
+      chunks: ["extensionWindow/extensionWindow"],
     }),
 
     // Cache viewer page

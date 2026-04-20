@@ -15,7 +15,7 @@ interface StoredImage {
 
 let dbPromise: Promise<IDBPDatabase> | null = null;
 
-function getDB(): Promise<IDBPDatabase> {
+const getDB = (): Promise<IDBPDatabase> => {
   if (!dbPromise) {
     dbPromise = openDB(IMAGE_DB_NAME, 1, {
       upgrade(db) {
@@ -24,13 +24,15 @@ function getDB(): Promise<IDBPDatabase> {
     });
   }
   return dbPromise;
-}
+};
 
-async function getImageBuffer(url: string): Promise<ArrayBuffer | null> {
+const getImageBuffer = async (url: string): Promise<ArrayBuffer | null> => {
   try {
     const db = await getDB();
     const stored: StoredImage | undefined = await db.get(IMAGE_STORE, url);
-    if (!stored) return null;
+    if (!stored) {
+      return null;
+    }
     if (Date.now() - stored.cachedAt > IMAGE_TTL_MS) {
       await db.delete(IMAGE_STORE, url);
       return null;
@@ -39,30 +41,36 @@ async function getImageBuffer(url: string): Promise<ArrayBuffer | null> {
   } catch {
     return null;
   }
-}
+};
 
-export async function storeImageBuffer(url: string, buffer: ArrayBuffer): Promise<void> {
+export const storeImageBuffer = async (url: string, buffer: ArrayBuffer): Promise<void> => {
   try {
     const db = await getDB();
     await db.put(IMAGE_STORE, { buffer, cachedAt: Date.now() } satisfies StoredImage, url);
-  } catch { /* quota exceeded */ }
-}
+  } catch {
+    /* quota exceeded */
+  }
+};
 
 /**
  * Check cache, fetch if missing, store, return ArrayBuffer.
  * Returns null if the image cannot be fetched.
  */
-export async function resolveImageBuffer(url: string): Promise<ArrayBuffer | null> {
+export const resolveImageBuffer = async (url: string): Promise<ArrayBuffer | null> => {
   const cached = await getImageBuffer(url);
-  if (cached) return cached;
+  if (cached) {
+    return cached;
+  }
 
   try {
     const resp = await fetch(url, { credentials: "omit" });
-    if (!resp.ok) return null;
+    if (!resp.ok) {
+      return null;
+    }
     const buffer = await resp.arrayBuffer();
     await storeImageBuffer(url, buffer);
     return buffer;
   } catch {
     return null;
   }
-}
+};

@@ -19,9 +19,12 @@ After making changes, run `npm run build` again and click the refresh icon on th
 
 ## Future Work
 
-1. issue where sometimes data that should be retreivable is not, have claude come up with multiple parsing methods
-2. I want the profile fetching function to try again for data it couldn't find
-3. Figure out how to publish this on the chrome store
-4. Write a post on linkedIn about this
-5. LinkedIn supported this behavior for people and companies. Also add this behavior for companies
-6. Make an icon
+- The "recommended for you" section totally doesn't work
+
+- Use the profile pic from the current page while waiting for data to load, but then use the pic from the loaded profile
+
+- Figure out how to publish this on the chrome store
+
+- Write a post on linkedIn about this
+
+- LinkedIn supported this behavior for people and companies. Also add this behavior for companies

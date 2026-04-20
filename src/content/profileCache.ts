@@ -1,6 +1,7 @@
 export interface ProfileData {
   name: string;
   imgSrc: string | null;
+  pronouns: string | null;
   subtitle: string | null;
   company: string | null;
   location: string | null;
@@ -18,12 +19,14 @@ export interface StoredProfile {
 // chrome.storage.local is accessible from both content scripts and extension
 // pages (e.g. the viewer), unlike localStorage which is origin-scoped.
 
-export async function loadProfileFromStorage(profileUrl: string): Promise<ProfileData | null> {
+export const loadProfileFromStorage = async (profileUrl: string): Promise<ProfileData | null> => {
   try {
     const key = STORAGE_PREFIX + profileUrl;
     const result = await chrome.storage.local.get(key);
     const stored: StoredProfile | undefined = result[key];
-    if (!stored) return null;
+    if (!stored) {
+      return null;
+    }
     if (Date.now() - stored.cachedAt > PROFILE_TTL_MS) {
       chrome.storage.local.remove(key);
       return null;
@@ -32,16 +35,19 @@ export async function loadProfileFromStorage(profileUrl: string): Promise<Profil
   } catch {
     return null;
   }
-}
+};
 
-export async function saveProfileToStorage(profileUrl: string, data: ProfileData): Promise<void> {
+export const saveProfileToStorage = async (
+  profileUrl: string,
+  data: ProfileData,
+): Promise<void> => {
   try {
     const stored: StoredProfile = { data, cachedAt: Date.now() };
     await chrome.storage.local.set({ [STORAGE_PREFIX + profileUrl]: stored });
   } catch {
     // Storage may be full — fail silently
   }
-}
+};
 
 // ── Image cache (via background service worker) ───────────────────────────────
 // Images are stored in extension-origin IndexedDB by the background service
@@ -52,12 +58,16 @@ export async function saveProfileToStorage(profileUrl: string, data: ProfileData
 const objectUrlCache = new Map<string, string>();
 
 /** Returns a blob: object URL for the image, fetching and caching via background. */
-export async function resolveImage(url: string): Promise<string> {
-  if (objectUrlCache.has(url)) return objectUrlCache.get(url)!;
+export const resolveImage = async (url: string): Promise<string> => {
+  if (objectUrlCache.has(url)) {
+    return objectUrlCache.get(url)!;
+  }
 
   try {
-    const response: { base64: string } | { error: string } =
-      await chrome.runtime.sendMessage({ type: "resolveImage", url });
+    const response: { base64: string } | { error: string } = await chrome.runtime.sendMessage({
+      type: "resolveImage",
+      url,
+    });
     if ("base64" in response && typeof response.base64 === "string") {
       const binary = atob(response.base64);
       const bytes = new Uint8Array(binary.length);
@@ -68,7 +78,9 @@ export async function resolveImage(url: string): Promise<string> {
       objectUrlCache.set(url, objectUrl);
       return objectUrl;
     }
-  } catch { /* extension context invalidated or background unavailable */ }
+  } catch {
+    /* extension context invalidated or background unavailable */
+  }
 
   return url; // fallback to CDN URL
-}
+};

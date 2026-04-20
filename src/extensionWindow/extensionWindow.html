@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LinkedIn Profile Pop-Ups</title>
+  </head>
+  <body>
+    <div id="app">
+      <header class="header">
+        <img src="../icons/icon48.png" class="header-icon" alt="" />
+        <h1>LinkedIn Profile Pop-Ups</h1>
+      </header>
+      <main class="content">
+        <p id="status" class="status">Loading...</p>
+
+        <div class="section" id="main-section" style="display: none">
+          <div class="row">
+            <div class="row-label">
+              <span class="row-title">Hover Popups</span>
+              <span class="row-desc">Show profile cards on hover</span>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="popup-toggle" />
+              <span class="switch-track"></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="section" id="highlight-section" style="display: none">
+          <div class="row">
+            <div class="row-label">
+              <span class="row-title">Highlighting</span>
+              <span class="row-desc">Highlight profile links in blue</span>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="highlight-toggle" />
+              <span class="switch-track"></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="section" id="view-cache-section" style="display: none">
+          <div class="row">
+            <div class="row-label">
+              <span class="row-title">View Profile Cache</span>
+              <span class="row-desc">View cached profile data</span>
+            </div>
+            <button id="view-cache-btn" class="btn view-profile-cache">View</button>
+          </div>
+        </div>
+
+        <div class="footer">
+          <label class="dev-toggle" id="dev-mode-row" style="display: none">
+            <span class="switch switch--small">
+              <input type="checkbox" id="dev-mode-toggle" />
+              <span class="switch-track"></span>
+            </span>
+            <span class="dev-label">Developer Mode</span>
+          </label>
+        </div>
+      </main>
+    </div>
+  </body>
+</html>

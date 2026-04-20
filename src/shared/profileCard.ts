@@ -5,7 +5,7 @@ import type { ProfileData } from "../content/profileCache";
  * to `container` using shared `li-ext-*` CSS classes.
  * Both the hover popup and the viewer card use this.
  */
-export function renderProfileContent(container: HTMLElement, data: ProfileData): void {
+export const renderProfileContent = (container: HTMLElement, data: ProfileData): void => {
   if (data.imgSrc) {
     const img = document.createElement("img");
     img.src = data.imgSrc;
@@ -23,6 +23,12 @@ export function renderProfileContent(container: HTMLElement, data: ProfileData):
     const el = document.createElement("div");
     el.className = "li-ext-name";
     el.textContent = data.name;
+    container.appendChild(el);
+  }
+  if (data.pronouns) {
+    const el = document.createElement("div");
+    el.className = "li-ext-pronouns";
+    el.textContent = data.pronouns;
     container.appendChild(el);
   }
   if (data.subtitle) {
@@ -43,4 +49,4 @@ export function renderProfileContent(container: HTMLElement, data: ProfileData):
     el.textContent = data.location;
     container.appendChild(el);
   }
-}
+};

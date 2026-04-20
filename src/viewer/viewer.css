@@ -65,7 +65,9 @@ body {
   gap: 8px;
   text-decoration: none;
   color: inherit;
-  transition: box-shadow 0.2s, transform 0.15s;
+  transition:
+    box-shadow 0.2s,
+    transform 0.15s;
   border-top: 3px solid #0a66c2;
 }
 
@@ -101,6 +103,13 @@ body {
   font-size: 14px;
   text-align: center;
   color: #1d1d1d;
+}
+
+.li-ext-pronouns {
+  font-size: 10px;
+  color: #888;
+  text-align: center;
+  margin-top: -2px;
 }
 
 .li-ext-subtitle {

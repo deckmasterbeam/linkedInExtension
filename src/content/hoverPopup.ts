@@ -1,8 +1,11 @@
 import type { ProfileData } from "./profileCache";
 import { renderProfileContent } from "../shared/profileCard";
 
-export function injectStyles(): void {
-  if (document.getElementById("li-ext-styles")) return;
+export const injectStyles = (): void => {
+  if (document.getElementById("li-ext-styles")) {
+    return;
+  }
+
   const style = document.createElement("style");
   style.id = "li-ext-styles";
   style.textContent = `
@@ -48,6 +51,12 @@ export function injectStyles(): void {
       color: #1d1d1d;
       text-align: center;
     }
+    .li-ext-pronouns {
+      font-size: 11px;
+      color: #888;
+      text-align: center;
+      margin-top: -2px;
+    }
     .li-ext-subtitle {
       font-size: 12px;
       color: #555;
@@ -71,9 +80,9 @@ export function injectStyles(): void {
     }
   `;
   document.head.appendChild(style);
-}
+};
 
-function getOrCreatePopup(): HTMLDivElement {
+const getOrCreatePopup = (): HTMLDivElement => {
   let popup = document.getElementById("li-ext-popup") as HTMLDivElement | null;
   if (!popup) {
     popup = document.createElement("div");
@@ -81,24 +90,26 @@ function getOrCreatePopup(): HTMLDivElement {
     document.body.appendChild(popup);
   }
   return popup;
-}
+};
 
-function positionPopup(popup: HTMLDivElement, link: HTMLAnchorElement): void {
+const positionPopup = (popup: HTMLDivElement, link: HTMLAnchorElement): void => {
   const rect = link.getBoundingClientRect();
   const popupW = 240;
   const popupH = 220;
 
   let top = rect.top - popupH - 10;
-  if (top < 8) top = rect.bottom + 10;
+  if (top < 8) {
+    top = rect.bottom + 10;
+  }
 
   let left = rect.left + rect.width / 2 - popupW / 2;
   left = Math.max(8, Math.min(left, window.innerWidth - popupW - 8));
 
   popup.style.top = `${top}px`;
   popup.style.left = `${left}px`;
-}
+};
 
-export function renderPopup(data: ProfileData | null, link: HTMLAnchorElement): void {
+export const renderPopup = (data: ProfileData | null, link: HTMLAnchorElement): void => {
   const popup = getOrCreatePopup();
   while (popup.firstChild) popup.removeChild(popup.firstChild);
 
@@ -113,8 +124,8 @@ export function renderPopup(data: ProfileData | null, link: HTMLAnchorElement): 
 
   positionPopup(popup, link);
   popup.classList.add("visible");
-}
+};
 
-export function hidePopup(): void {
+export const hidePopup = (): void => {
   document.getElementById("li-ext-popup")?.classList.remove("visible");
-}
+};

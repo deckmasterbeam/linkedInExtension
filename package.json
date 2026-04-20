@@ -6,14 +6,19 @@
   "scripts": {
     "build": "webpack --mode production",
     "dev": "webpack --mode development --watch",
-    "clean": "rimraf dist"
+    "clean": "rimraf dist",
+    "prepare": "husky",
+    "format": "prettier --write \"src/**/*.{ts,css,html}\""
   },
   "devDependencies": {
     "@types/chrome": "^0.0.290",
     "copy-webpack-plugin": "^12.0.2",
     "css-loader": "^7.1.2",
     "html-webpack-plugin": "^5.6.3",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
     "mini-css-extract-plugin": "^2.9.1",
+    "prettier": "^3.8.3",
     "rimraf": "^6.0.1",
     "ts-loader": "^9.5.1",
     "typescript": "^5.4.5",
@@ -22,5 +27,15 @@
   },
   "dependencies": {
     "idb": "^8.0.3"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,json,css,html}": "prettier --write"
+  },
+  "prettier": {
+    "semi": true,
+    "singleQuote": false,
+    "trailingComma": "all",
+    "printWidth": 100,
+    "tabWidth": 2
   }
 }
