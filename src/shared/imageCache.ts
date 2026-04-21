@@ -43,7 +43,7 @@ const getImageBuffer = async (url: string): Promise<ArrayBuffer | null> => {
   }
 };
 
-export const storeImageBuffer = async (url: string, buffer: ArrayBuffer): Promise<void> => {
+const storeImageBuffer = async (url: string, buffer: ArrayBuffer): Promise<void> => {
   try {
     const db = await getDB();
     await db.put(IMAGE_STORE, { buffer, cachedAt: Date.now() } satisfies StoredImage, url);

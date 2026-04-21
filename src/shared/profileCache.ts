@@ -5,6 +5,7 @@ export interface ProfileData {
   subtitle: string | null;
   company: string | null;
   location: string | null;
+  isConnection: boolean | null;
 }
 
 export const STORAGE_PREFIX = "li-ext:profile:";

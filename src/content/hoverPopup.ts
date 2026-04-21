@@ -1,4 +1,4 @@
-import type { ProfileData } from "./profileCache";
+import type { ProfileData } from "../shared/profileCache";
 import { renderProfileContent } from "../shared/profileCard";
 
 export const injectStyles = (): void => {
@@ -73,6 +73,21 @@ export const injectStyles = (): void => {
       font-size: 11px;
       color: #888;
       text-align: center;
+    }
+    .li-ext-connection {
+      font-size: 11px;
+      font-weight: 600;
+      border-radius: 12px;
+      padding: 2px 10px;
+      margin-top: 2px;
+    }
+    .li-ext-connection--yes {
+      background: #e6f4ea;
+      color: #057642;
+    }
+    .li-ext-connection--no {
+      background: #f0f0f0;
+      color: #888;
     }
     .li-ext-loading {
       font-size: 12px;

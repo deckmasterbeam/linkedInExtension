@@ -1,4 +1,4 @@
-import type { ProfileData } from "../content/profileCache";
+import type { ProfileData } from "./profileCache";
 
 /**
  * Appends profile content elements (avatar, name, subtitle, company, location)
@@ -47,6 +47,14 @@ export const renderProfileContent = (container: HTMLElement, data: ProfileData):
     const el = document.createElement("div");
     el.className = "li-ext-location";
     el.textContent = data.location;
+    container.appendChild(el);
+  }
+  if (data.isConnection !== null) {
+    const el = document.createElement("div");
+    el.className = data.isConnection
+      ? "li-ext-connection li-ext-connection--yes"
+      : "li-ext-connection li-ext-connection--no";
+    el.textContent = data.isConnection ? "Connected" : "Not connected";
     container.appendChild(el);
   }
 };

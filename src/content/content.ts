@@ -1,27 +1,16 @@
 // Content script — injected into linkedin.com pages
 // Has access to the page DOM but runs in an isolated JS world.
-import { type ProfileData, resolveImage } from "./profileCache";
-import { fetchProfileData } from "./profileFetcher";
+import { type ProfileData, resolveImage } from "../shared/profileCache";
+import { fetchProfileData } from "../shared/profileFetcher";
 import { injectStyles, renderPopup, hidePopup } from "./hoverPopup";
-import { loadExtensionState } from "../shared/helpers";
+import { loadExtensionState, normalizeProfileUrl, isSuppressedLink } from "../shared/helpers";
 
 const HIGHLIGHT_ATTR = "data-li-ext-highlighted";
+const PROFILE_LINK_SELECTOR = `a[href^="https://www.linkedin.com/in/"], a[href^="/in/"]`;
 
-/** Strip query-string/hash and any sub-paths (overlays, details, etc.) so only
- *  the canonical profile root is used as a cache key.
- *  Returns null when the URL is not a plain profile link. */
-const normalizeProfileUrl = (href: string): string | null => {
-  try {
-    const url = new URL(href);
-    const match = url.pathname.match(/^(\/in\/[^/]+)\/?/);
-    if (!match) {
-      return null;
-    }
-    return url.origin + match[1];
-  } catch {
-    return null;
-  }
-};
+/** The canonical URL of the profile page currently being viewed, or null if
+ *  this is not a profile page. Used to skip popups on self-referencing links. */
+const currentPageProfileUrl = normalizeProfileUrl(location.href);
 
 /** Extract profile picture from the live page DOM surrounding the link. */
 const extractImgFromDOM = (link: HTMLAnchorElement): string | null => {
@@ -42,16 +31,14 @@ document.addEventListener("mouseover", async (e) => {
   if (!popupsEnabled) {
     return;
   }
-  const link = (e.target as Element).closest<HTMLAnchorElement>(
-    `a[href^="https://www.linkedin.com/in/"]`,
-  );
+  const link = (e.target as Element).closest<HTMLAnchorElement>(PROFILE_LINK_SELECTOR);
   if (!link) {
     return;
   }
 
   clearTimeout(hoverTimer);
   const profileUrl = normalizeProfileUrl(link.href);
-  if (!profileUrl) {
+  if (!profileUrl || isSuppressedLink(link, currentPageProfileUrl)) {
     return;
   }
   currentHoverUrl = profileUrl;
@@ -60,7 +47,15 @@ document.addEventListener("mouseover", async (e) => {
   hoverTimer = window.setTimeout(async () => {
     const imgSrc = extractImgFromDOM(link);
     renderPopup(
-      { name: "", imgSrc, pronouns: null, subtitle: null, company: null, location: null },
+      {
+        name: "",
+        imgSrc,
+        pronouns: null,
+        subtitle: null,
+        company: null,
+        location: null,
+        isConnection: null,
+      },
       link,
     ); // show image immediately
 
@@ -72,7 +67,7 @@ document.addEventListener("mouseover", async (e) => {
       if (currentHoverUrl !== profileUrl) {
         return; // user already moved on
       }
-      renderPopup({ ...data, imgSrc: resolvedImg ?? data.imgSrc }, link);
+      renderPopup({ ...data, imgSrc: data.imgSrc ?? resolvedImg }, link);
     } catch {
       if (currentHoverUrl === profileUrl) {
         hidePopup();
@@ -82,10 +77,8 @@ document.addEventListener("mouseover", async (e) => {
 });
 
 document.addEventListener("mouseout", (e) => {
-  const left = (e.target as Element).closest<HTMLAnchorElement>(
-    `a[href^="https://www.linkedin.com/in/"]`,
-  );
-  if (left) {
+  const left = (e.target as Element).closest<HTMLAnchorElement>(PROFILE_LINK_SELECTOR);
+  if (left && normalizeProfileUrl(left.href)) {
     clearTimeout(hoverTimer);
     currentHoverUrl = null;
     hidePopup();
@@ -96,9 +89,13 @@ document.addEventListener("mouseout", (e) => {
 
 export const applyHighlight = (): void => {
   const els = document.querySelectorAll<HTMLAnchorElement>(
-    `a[href^="https://www.linkedin.com/in/"]:not([${HIGHLIGHT_ATTR}])`,
+    `${PROFILE_LINK_SELECTOR}:not([${HIGHLIGHT_ATTR}])`,
   );
   els.forEach((el) => {
+    const profileUrl = normalizeProfileUrl(el.href);
+    if (!profileUrl || isSuppressedLink(el, currentPageProfileUrl)) {
+      return;
+    }
     el.style.backgroundColor = "#cce5ff";
     el.style.borderRadius = "4px";
     el.style.padding = "1px 3px";
@@ -108,7 +105,7 @@ export const applyHighlight = (): void => {
 
 export const removeHighlight = (): void => {
   const els = document.querySelectorAll<HTMLAnchorElement>(
-    `a[href^="https://www.linkedin.com/in/"][${HIGHLIGHT_ATTR}]`,
+    `${PROFILE_LINK_SELECTOR}[${HIGHLIGHT_ATTR}]`,
   );
   els.forEach((el) => {
     el.style.backgroundColor = "";
@@ -117,6 +114,76 @@ export const removeHighlight = (): void => {
     el.removeAttribute(HIGHLIGHT_ATTR);
   });
   hidePopup();
+};
+
+// ── Install log ───────────────────────────────────────────────────────────────
+
+/**
+ * LinkedIn stores the CSRF token as the value of the JSESSIONID cookie.
+ * The value may be bare or double-quoted.
+ */
+const getCsrfToken = (): string | null => {
+  const match = document.cookie.match(/JSESSIONID=(?:"([^"]+)"|([^;]+))/);
+  return match?.[1] ?? match?.[2] ?? null;
+};
+
+/**
+ * Fetches the logged-in user's LinkedIn username via the Voyager /me API.
+ * Runs same-origin (content script is on linkedin.com) so no CORS issues.
+ * Returns null on any failure — the log will be retried on the next page load.
+ */
+const fetchLinkedInUsername = async (): Promise<string | null> => {
+  const csrf = getCsrfToken();
+  if (!csrf) {
+    return null;
+  }
+  try {
+    const res = await fetch("/voyager/api/me", {
+      headers: {
+        accept: "application/vnd.linkedin.normalized+json+2.1",
+        "csrf-token": csrf,
+      },
+      credentials: "include",
+    });
+    if (!res.ok) {
+      return null;
+    }
+    const data = (await res.json()) as Record<string, unknown>;
+    const profile =
+      (data?.miniProfile as Record<string, unknown> | undefined) ??
+      ((data?.data as Record<string, unknown> | undefined)?.miniProfile as
+        | Record<string, unknown>
+        | undefined);
+    return typeof profile?.publicIdentifier === "string" ? profile.publicIdentifier : null;
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * If this is the first page load after install, fetch the user's LinkedIn
+ * username and ask the background worker to POST it to the install log API.
+ * The flag is cleared only after a successful API response so that a transient
+ * failure is retried on the next page load.
+ */
+const maybeLogInstall = async (): Promise<void> => {
+  const stored = await chrome.storage.local.get("pendingInstallLog");
+  const pending = stored.pendingInstallLog as { installedAt: string } | undefined;
+  if (!pending) {
+    return;
+  }
+  const username = await fetchLinkedInUsername();
+  if (!username) {
+    return;
+  }
+  const response = (await chrome.runtime.sendMessage({
+    type: "logInstall",
+    username,
+    installedAt: pending.installedAt,
+  })) as { ok: boolean } | undefined;
+  if (response?.ok) {
+    await chrome.storage.local.remove("pendingInstallLog");
+  }
 };
 
 // ── Init ──────────────────────────────────────────────────────────────────────
@@ -131,6 +198,8 @@ const observer = new MutationObserver(async () => {
 });
 
 observer.observe(document.body, { childList: true, subtree: true });
+
+void maybeLogInstall();
 
 /** Returns false when the extension has been reloaded and this context is stale. */
 const isContextValid = (): boolean => {
@@ -163,7 +232,6 @@ if (isContextValid()) {
       await chrome.storage.local.set({ popupsEnabled: message.enabled });
       if (!message.enabled) {
         hidePopup();
-      } else {
       }
       sendResponse({ enabled: message.enabled });
     } else if (message.action === "toggleDevMode") {

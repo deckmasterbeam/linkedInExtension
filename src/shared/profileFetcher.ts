@@ -1,5 +1,5 @@
 import { type ProfileData, loadProfileFromStorage, saveProfileToStorage } from "./profileCache";
-import { loadExtensionState } from "../shared/helpers";
+import { loadExtensionState } from "./helpers";
 
 // In-memory cache for the lifetime of the page
 const profileCache = new Map<string, ProfileData>();
@@ -78,10 +78,29 @@ const extractViaHeadingWalk = (doc: Document, name: string): ParagraphData | nul
 };
 
 /**
- * Fallback strategy: search any leaf element (a, span, strong) whose text
- * exactly matches the name, then walk up. Handles cases where LinkedIn
- * renders the name outside a heading element.
+ * Returns true when the fetched profile page shows a 1st-degree connection
+ * badge, false for 2nd/3rd/out-of-network, or false when no badge is found.
+ *
+ * Strategy: LinkedIn's SSR rehydration script encodes the profile's network
+ * distance as a state key "profile_network_distance_{id}" with stringValue
+ * "Distance1" (1st), "Distance2" (2nd), etc. DOM badge scanning is unreliable
+ * because the page also renders badges for other people shown on the page.
  */
+const extractConnectionDegree = (doc: Document): boolean | null => {
+  const scripts = Array.from(doc.querySelectorAll("script:not([src])"));
+  const rehydration = scripts.find((s) => s.textContent?.includes("profile_network_distance_"));
+  if (!rehydration) {
+    return false;
+  }
+  const content = rehydration.textContent ?? "";
+  const segment = content.slice(
+    content.indexOf("profile_network_distance_"),
+    content.indexOf("profile_network_distance_") + 500,
+  );
+  const match = segment.match(/\\"stringValue\\":\\"(Distance\d+)\\"/);
+  return match ? match[1] === "Distance1" : false;
+};
+
 const extractViaLeafWalk = (doc: Document, name: string): ParagraphData | null => {
   const candidates = Array.from(doc.querySelectorAll("a, span, strong")).filter(
     (el) => el.children.length === 0 && el.textContent?.trim() === name,
@@ -93,6 +112,18 @@ const extractViaLeafWalk = (doc: Document, name: string): ParagraphData | null =
     }
   }
   return null;
+};
+
+// ── Image extraction ────────────────────────────────────────────────────────
+
+/**
+ * Extracts the profile photo URL from a fetched profile page document.
+ * LinkedIn SSR pages contain an <img src="...profile-displayphoto..."> for
+ * the subject's photo. Returns null if not found.
+ */
+const extractImgFromDoc = (doc: Document): string | null => {
+  const img = doc.querySelector<HTMLImageElement>('img[src*="profile-displayphoto"]');
+  return img?.src ?? null;
 };
 
 // ── Main export ───────────────────────────────────────────────────────────────
@@ -131,11 +162,6 @@ export const fetchProfileData = async (
     const html = await resp.text();
     const doc = new DOMParser().parseFromString(html, "text/html");
 
-    const { devMode } = await loadExtensionState();
-    if (devMode) {
-      console.log("[li-ext] profile HTML:", html);
-    }
-
     // Name is always in <title> as "First Last | LinkedIn"
     const name = doc.title.replace(/\s*\|\s*LinkedIn\s*$/, "").trim();
 
@@ -144,11 +170,12 @@ export const fetchProfileData = async (
 
     const data: ProfileData = {
       name,
-      imgSrc,
+      imgSrc: extractImgFromDoc(doc) ?? imgSrc,
       pronouns: paragraphData?.pronouns ?? null,
       subtitle: paragraphData?.subtitle ?? null,
       company: paragraphData?.company ?? null,
       location: paragraphData?.location ?? null,
+      isConnection: extractConnectionDegree(doc),
     };
 
     profileCache.set(profileUrl, data);

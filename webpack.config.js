@@ -2,6 +2,11 @@ const path = require("path");
 const CopyPlugin = require("copy-webpack-plugin");
 const HtmlWebpackPlugin = require("html-webpack-plugin");
 const MiniCssExtractPlugin = require("mini-css-extract-plugin");
+const webpack = require("webpack");
+const dotenv = require("dotenv");
+
+// Load .env if present; values can be overridden by real environment variables
+dotenv.config();
 
 /** @type {import('webpack').Configuration} */
 module.exports = {
@@ -59,6 +64,13 @@ module.exports = {
       filename: "viewer.html",
       chunks: ["viewer"],
       inject: true,
+    }),
+
+    // Inject build-time config values so src/shared/config.ts can read them
+    // without committing secrets to git.
+    new webpack.DefinePlugin({
+      __API_BASE_URL__: JSON.stringify(process.env.API_BASE_URL ?? ""),
+      __INSTALL_LOG_API_KEY__: JSON.stringify(process.env.INSTALL_LOG_API_KEY ?? ""),
     }),
 
     // Copy static assets that webpack doesn't process
