@@ -1,3 +1,1 @@
-{
-  "_note": "No runtime config needed. Vercel auto-detects api/*.ts files and runs them with @vercel/node."
-}
+{}
