@@ -265,6 +265,38 @@ describe("fetchProfileData", () => {
       expect(result.company).toBe("Startup Inc");
       expect(result.location).toBe("New York, NY");
     });
+
+    it("returns null subtitle when the name is in a heading but has no surrounding paragraphs", async () => {
+      // Hits walkUpForParagraphs line 61: loop exhausts all ancestors, no <p> found.
+      const url = "https://www.linkedin.com/in/no-paragraphs";
+      mockFetchHtml(`
+        <html>
+          <head><title>No Paragraphs | LinkedIn</title></head>
+          <body><div><h1>No Paragraphs</h1></div></body>
+        </html>
+      `);
+
+      const result = await fetchProfileData(url, null);
+
+      expect(result.name).toBe("No Paragraphs");
+      expect(result.subtitle).toBeNull();
+    });
+
+    it("returns null subtitle when leaf candidates exist but have no surrounding paragraphs", async () => {
+      // Hits walkUpForParagraphs line 61 (for each candidate) and extractViaLeafWalk line 115.
+      const url = "https://www.linkedin.com/in/leaf-no-paragraphs";
+      mockFetchHtml(`
+        <html>
+          <head><title>Leaf No Para | LinkedIn</title></head>
+          <body><div><a>Leaf No Para</a></div></body>
+        </html>
+      `);
+
+      const result = await fetchProfileData(url, null);
+
+      expect(result.name).toBe("Leaf No Para");
+      expect(result.subtitle).toBeNull();
+    });
   });
 
   // ── HTML extraction: profile image ──────────────────────────────────────────

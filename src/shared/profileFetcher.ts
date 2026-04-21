@@ -93,11 +93,10 @@ const extractConnectionDegree = (doc: Document): boolean | null => {
     return false;
   }
   const content = rehydration.textContent ?? "";
-  const keyIdx = content.indexOf("profile_network_distance_");
-  if (keyIdx < 0) {
-    return false;
-  }
-  const segment = content.slice(keyIdx, keyIdx + 500);
+  const segment = content.slice(
+    content.indexOf("profile_network_distance_"),
+    content.indexOf("profile_network_distance_") + 500,
+  );
   const match = segment.match(/\\"stringValue\\":\\"(Distance\d+)\\"/);
   return match ? match[1] === "Distance1" : false;
 };
@@ -162,11 +161,6 @@ export const fetchProfileData = async (
 
     const html = await resp.text();
     const doc = new DOMParser().parseFromString(html, "text/html");
-
-    const { devMode } = await loadExtensionState();
-    if (devMode) {
-      console.log("[li-ext] profile HTML:", html);
-    }
 
     // Name is always in <title> as "First Last | LinkedIn"
     const name = doc.title.replace(/\s*\|\s*LinkedIn\s*$/, "").trim();

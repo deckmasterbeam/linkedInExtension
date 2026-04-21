@@ -1,4 +1,15 @@
-import { normalizeProfileUrl, isSuppressedLink } from "../helpers";
+import { normalizeProfileUrl, isSuppressedLink, loadExtensionState } from "../helpers";
+
+// ── chrome stub (for loadExtensionState tests) ────────────────────────────────
+// Must be set up before any module that references `chrome` is imported.
+// We mutate .get and .set per-test rather than replacing the whole global.
+const storageMock = {
+  get: jest.fn(),
+  set: jest.fn(),
+};
+globalThis.chrome = {
+  storage: { local: storageMock },
+} as unknown as typeof chrome;
 
 const randomUsername = "randomUser123";
 
@@ -204,5 +215,78 @@ describe("isSuppressedLink", () => {
       link.href = profileUrl;
       expect(isSuppressedLink(link)).toBe(false);
     });
+  });
+});
+
+// ── loadExtensionState ────────────────────────────────────────────────────────
+
+describe("loadExtensionState", () => {
+  beforeEach(() => {
+    storageMock.get.mockReset();
+    storageMock.set.mockReset().mockResolvedValue(undefined);
+  });
+
+  it("returns stored values when all three keys are present", async () => {
+    storageMock.get.mockResolvedValue({ devMode: true, popupsEnabled: false, highlighting: true });
+
+    const state = await loadExtensionState();
+
+    expect(state).toEqual({ devMode: true, popupsEnabled: false, highlighting: true });
+  });
+
+  it("defaults devMode to false when missing", async () => {
+    storageMock.get.mockResolvedValue({ popupsEnabled: true, highlighting: false });
+
+    const state = await loadExtensionState();
+
+    expect(state.devMode).toBe(false);
+  });
+
+  it("defaults popupsEnabled to true when missing", async () => {
+    storageMock.get.mockResolvedValue({ devMode: false, highlighting: false });
+
+    const state = await loadExtensionState();
+
+    expect(state.popupsEnabled).toBe(true);
+  });
+
+  it("defaults highlighting to false when missing", async () => {
+    storageMock.get.mockResolvedValue({ devMode: false, popupsEnabled: true });
+
+    const state = await loadExtensionState();
+
+    expect(state.highlighting).toBe(false);
+  });
+
+  it("persists default devMode when it is missing from storage", async () => {
+    storageMock.get.mockResolvedValue({ popupsEnabled: true, highlighting: false });
+
+    await loadExtensionState();
+
+    expect(storageMock.set).toHaveBeenCalledWith({ devMode: false });
+  });
+
+  it("persists default popupsEnabled when it is missing from storage", async () => {
+    storageMock.get.mockResolvedValue({ devMode: false, highlighting: false });
+
+    await loadExtensionState();
+
+    expect(storageMock.set).toHaveBeenCalledWith({ popupsEnabled: true });
+  });
+
+  it("persists default highlighting when it is missing from storage", async () => {
+    storageMock.get.mockResolvedValue({ devMode: false, popupsEnabled: true });
+
+    await loadExtensionState();
+
+    expect(storageMock.set).toHaveBeenCalledWith({ highlighting: false });
+  });
+
+  it("does not write defaults when all values are already stored", async () => {
+    storageMock.get.mockResolvedValue({ devMode: false, popupsEnabled: true, highlighting: false });
+
+    await loadExtensionState();
+
+    expect(storageMock.set).not.toHaveBeenCalled();
   });
 });

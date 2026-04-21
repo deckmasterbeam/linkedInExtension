@@ -1,7 +1,3 @@
 {
-  "functions": {
-    "api/**/*.ts": {
-      "runtime": "@vercel/node"
-    }
-  }
+  "_note": "No runtime config needed. Vercel auto-detects api/*.ts files and runs them with @vercel/node."
 }

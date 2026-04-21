@@ -5,14 +5,6 @@ import { neon } from "@neondatabase/serverless";
  * POST /api/log-install
  * Body: { username: string, installedAt: string (ISO 8601) }
  * Header: x-install-key matching the INSTALL_LOG_API_KEY env var
- *
- * Run once against your Neon database before deploying:
- *   CREATE TABLE IF NOT EXISTS install_log (
- *     id          SERIAL PRIMARY KEY,
- *     linkedin_username TEXT NOT NULL,
- *     installed_at      TIMESTAMPTZ NOT NULL,
- *     logged_at         TIMESTAMPTZ DEFAULT NOW()
- *   );
  */
 export default async (req: VercelRequest, res: VercelResponse): Promise<void> => {
   res.setHeader("Access-Control-Allow-Origin", "*");
