@@ -1,5 +1,4 @@
 import { type ProfileData, loadProfileFromStorage, saveProfileToStorage } from "./profileCache";
-import { loadExtensionState } from "./helpers";
 
 // In-memory cache for the lifetime of the page
 const profileCache = new Map<string, ProfileData>();

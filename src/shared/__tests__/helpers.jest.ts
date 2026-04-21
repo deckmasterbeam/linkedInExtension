@@ -231,7 +231,12 @@ describe("loadExtensionState", () => {
 
     const state = await loadExtensionState();
 
-    expect(state).toEqual({ devMode: true, popupsEnabled: false, highlighting: true });
+    expect(state).toEqual({
+      devMode: true,
+      popupsEnabled: false,
+      highlighting: true,
+      pendingInstallLogTime: null,
+    });
   });
 
   it("defaults devMode to false when missing", async () => {

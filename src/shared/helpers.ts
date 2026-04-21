@@ -2,10 +2,16 @@ type ExtensionState = {
   devMode: boolean;
   popupsEnabled: boolean;
   highlighting: boolean;
+  pendingInstallLogTime: string | null;
 };
 
 export const loadExtensionState = async (): Promise<ExtensionState> => {
-  const result = await chrome.storage.local.get(["devMode", "popupsEnabled", "highlighting"]);
+  const result = await chrome.storage.local.get([
+    "devMode",
+    "popupsEnabled",
+    "highlighting",
+    "pendingInstallLogTime",
+  ]);
   if (result.devMode === undefined) {
     chrome.storage.local.set({ devMode: false });
   }
@@ -19,6 +25,7 @@ export const loadExtensionState = async (): Promise<ExtensionState> => {
     devMode: result.devMode ?? false,
     popupsEnabled: result.popupsEnabled ?? true,
     highlighting: result.highlighting ?? false,
+    pendingInstallLogTime: result.pendingInstallLogTime ?? null,
   };
 };
 
