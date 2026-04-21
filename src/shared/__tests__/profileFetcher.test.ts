@@ -336,13 +336,13 @@ describe("fetchProfileData", () => {
       expect(result.isConnection).toBe(false);
     });
 
-    it("returns null when no rehydration script is present", async () => {
+    it("returns false when no rehydration script is present", async () => {
       const url = "https://www.linkedin.com/in/no-badge";
       mockFetchHtml(makeHeadingHtml({ name: "No Badge" }));
 
       const result = await fetchProfileData(url, null);
 
-      expect(result.isConnection).toBeNull();
+      expect(result.isConnection).toBe(false);
     });
 
     it("does not mistake a DOM degree badge for a subtitle paragraph", async () => {

@@ -116,6 +116,76 @@ export const removeHighlight = (): void => {
   hidePopup();
 };
 
+// ── Install log ───────────────────────────────────────────────────────────────
+
+/**
+ * LinkedIn stores the CSRF token as the value of the JSESSIONID cookie.
+ * The value may be bare or double-quoted.
+ */
+const getCsrfToken = (): string | null => {
+  const match = document.cookie.match(/JSESSIONID=(?:"([^"]+)"|([^;]+))/);
+  return match?.[1] ?? match?.[2] ?? null;
+};
+
+/**
+ * Fetches the logged-in user's LinkedIn username via the Voyager /me API.
+ * Runs same-origin (content script is on linkedin.com) so no CORS issues.
+ * Returns null on any failure — the log will be retried on the next page load.
+ */
+const fetchLinkedInUsername = async (): Promise<string | null> => {
+  const csrf = getCsrfToken();
+  if (!csrf) {
+    return null;
+  }
+  try {
+    const res = await fetch("/voyager/api/me", {
+      headers: {
+        accept: "application/vnd.linkedin.normalized+json+2.1",
+        "csrf-token": csrf,
+      },
+      credentials: "include",
+    });
+    if (!res.ok) {
+      return null;
+    }
+    const data = (await res.json()) as Record<string, unknown>;
+    const profile =
+      (data?.miniProfile as Record<string, unknown> | undefined) ??
+      ((data?.data as Record<string, unknown> | undefined)?.miniProfile as
+        | Record<string, unknown>
+        | undefined);
+    return typeof profile?.publicIdentifier === "string" ? profile.publicIdentifier : null;
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * If this is the first page load after install, fetch the user's LinkedIn
+ * username and ask the background worker to POST it to the install log API.
+ * The flag is cleared only after a successful API response so that a transient
+ * failure is retried on the next page load.
+ */
+const maybeLogInstall = async (): Promise<void> => {
+  const stored = await chrome.storage.local.get("pendingInstallLog");
+  const pending = stored.pendingInstallLog as { installedAt: string } | undefined;
+  if (!pending) {
+    return;
+  }
+  const username = await fetchLinkedInUsername();
+  if (!username) {
+    return;
+  }
+  const response = (await chrome.runtime.sendMessage({
+    type: "logInstall",
+    username,
+    installedAt: pending.installedAt,
+  })) as { ok: boolean } | undefined;
+  if (response?.ok) {
+    await chrome.storage.local.remove("pendingInstallLog");
+  }
+};
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 injectStyles();
@@ -128,6 +198,8 @@ const observer = new MutationObserver(async () => {
 });
 
 observer.observe(document.body, { childList: true, subtree: true });
+
+void maybeLogInstall();
 
 /** Returns false when the extension has been reloaded and this context is stale. */
 const isContextValid = (): boolean => {

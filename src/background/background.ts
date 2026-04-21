@@ -5,7 +5,9 @@ import { resolveImageBuffer } from "../shared/imageCache";
 
 chrome.runtime.onInstalled.addListener((details) => {
   if (details.reason === "install") {
-    console.log("[LinkedIn Extension] Installed");
+    // Store a pending flag so the content script can supply the LinkedIn
+    // username on the next page load, then the background posts to the log API.
+    chrome.storage.local.set({ pendingInstallLog: { installedAt: new Date().toISOString() } });
   } else if (details.reason === "update") {
     console.log("[LinkedIn Extension] Updated to", chrome.runtime.getManifest().version);
   }
@@ -28,6 +30,24 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       }
     });
     return true; // keep message channel open for async response
+  }
+
+  if (
+    message.type === "logInstall" &&
+    typeof message.username === "string" &&
+    typeof message.installedAt === "string"
+  ) {
+    fetch(`${__API_BASE_URL__}/api/log-install`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-install-key": __INSTALL_LOG_API_KEY__,
+      },
+      body: JSON.stringify({ username: message.username, installedAt: message.installedAt }),
+    })
+      .then((r) => sendResponse({ ok: r.ok }))
+      .catch(() => sendResponse({ ok: false }));
+    return true; // async
   }
 
   sendResponse({ ok: true });
