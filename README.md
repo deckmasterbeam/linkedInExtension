@@ -25,4 +25,4 @@ After making changes, run `npm run build` again and click the refresh icon on th
 
 - LinkedIn supported this behavior for companies too
 
-- log installs and connections to database
+- log connections to database

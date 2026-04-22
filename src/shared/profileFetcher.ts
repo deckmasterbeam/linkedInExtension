@@ -1,10 +1,10 @@
+import { getCsrfToken, loadExtensionState } from "./helpers";
 import { type ProfileData, loadProfileFromStorage, saveProfileToStorage } from "./profileCache";
-import { loadExtensionState } from "./helpers";
 
 // In-memory cache for the lifetime of the page
 const profileCache = new Map<string, ProfileData>();
 
-// ── Paragraph filter predicates ───────────────────────────────────────────────
+// -- Paragraph filter predicates ------------------------------------------------
 
 /** Matches LinkedIn connection-degree indicators like "· 1st", "· 2nd". */
 const DEGREE_RE = /^[·•]\s*(1st|2nd|3rd|\d+th?)$/u;
@@ -19,13 +19,13 @@ const PRONOUN_RE = /^[A-Za-z][a-z]*(?:\/[A-Za-z][a-z]*){1,2}$/;
 const NOISE_RE = /^(contact info|·|•)$/iu;
 
 /**
- * Returns true when a paragraph's text is meaningful profile data —
+ * Returns true when a paragraph's text is meaningful profile data -
  * i.e. not the person's name, not a degree badge, not pronouns, not noise.
  */
 const isMeaningfulP = (t: string, name: string): boolean =>
   t.length > 4 && t !== name && !DEGREE_RE.test(t) && !PRONOUN_RE.test(t) && !NOISE_RE.test(t);
 
-// ── Shared extraction logic ───────────────────────────────────────────────────
+// -- Shared extraction logic ----------------------------------------------------
 
 type ParagraphData = {
   pronouns: string | null;
@@ -61,10 +61,10 @@ const walkUpForParagraphs = (startEl: Element, name: string): ParagraphData | nu
   return null;
 };
 
-// ── Extraction strategies ─────────────────────────────────────────────────────
+// -- Extraction strategies ------------------------------------------------------
 
 /**
- * Primary strategy: find any heading (h1–h4) whose text exactly matches the
+ * Primary strategy: find any heading (h1-h4) whose text exactly matches the
  * person's name, then walk up to find surrounding paragraph data.
  */
 const extractViaHeadingWalk = (doc: Document, name: string): ParagraphData | null => {
@@ -114,7 +114,7 @@ const extractViaLeafWalk = (doc: Document, name: string): ParagraphData | null =
   return null;
 };
 
-// ── Image extraction ────────────────────────────────────────────────────────
+// -- Image extraction -----------------------------------------------------------
 
 /**
  * Extracts the profile photo URL from a fetched profile page document.
@@ -126,26 +126,218 @@ const extractImgFromDoc = (doc: Document): string | null => {
   return img?.src ?? null;
 };
 
-// ── Main export ───────────────────────────────────────────────────────────────
+// -- Voyager profile fetch (primary) -------------------------------------------
 
-export const fetchProfileData = async (
+/** Extracts vanity name from a profile URL, e.g. /in/jane-doe -> jane-doe. */
+const extractVanityName = (profileUrl: string): string | null => {
+  const match = profileUrl.match(/(?:https:\/\/www\.linkedin\.com)?\/in\/([^/?#]+)/);
+  return match?.[1] ?? null;
+};
+
+const VOYAGER_ACCEPT = "application/vnd.linkedin.normalized+json+2.1";
+
+const buildMemberIdentityUrl = (vanityName: string): string => {
+  const encodedMemberIdentity = encodeURIComponent(vanityName);
+  return `/voyager/api/identity/dash/profiles?q=memberIdentity&memberIdentity=${encodedMemberIdentity}`;
+};
+
+const asRecord = (value: unknown): Record<string, unknown> | null => {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+};
+
+const getString = (obj: Record<string, unknown>, key: string): string | null => {
+  const value = obj[key];
+  return typeof value === "string" && value.trim() ? value : null;
+};
+
+const getBoolean = (obj: Record<string, unknown>, key: string): boolean | null => {
+  const value = obj[key];
+  return typeof value === "boolean" ? value : null;
+};
+
+const pickLargestArtifactPath = (artifacts: unknown): string | null => {
+  if (!Array.isArray(artifacts) || artifacts.length === 0) {
+    return null;
+  }
+  let bestPath: string | null = null;
+  let bestPixels = -1;
+  for (const item of artifacts) {
+    const record = asRecord(item);
+    if (!record) {
+      continue;
+    }
+    const fileIdentifyingUrlPathSegment = getString(record, "fileIdentifyingUrlPathSegment");
+    if (!fileIdentifyingUrlPathSegment) {
+      continue;
+    }
+    const width = typeof record.width === "number" ? record.width : 0;
+    const height = typeof record.height === "number" ? record.height : 0;
+    const pixels = width * height;
+    if (pixels >= bestPixels) {
+      bestPixels = pixels;
+      bestPath = fileIdentifyingUrlPathSegment;
+    }
+  }
+  return bestPath;
+};
+
+const getVoyagerImage = (record: Record<string, unknown>): string | null => {
+  const profilePicture = asRecord(record.profilePicture) ?? asRecord(record.picture);
+  if (!profilePicture) {
+    return null;
+  }
+
+  const displayImage = asRecord(profilePicture["displayImage~"]);
+  const vectorImage = asRecord(displayImage?.vectorImage ?? profilePicture.vectorImage);
+  if (!vectorImage) {
+    return null;
+  }
+
+  const rootUrl = getString(vectorImage, "rootUrl");
+  const artifactPath = pickLargestArtifactPath(vectorImage.artifacts);
+  if (!rootUrl || !artifactPath) {
+    return null;
+  }
+
+  return rootUrl + artifactPath;
+};
+
+const needsHtmlEnrichment = (data: ProfileData): boolean => {
+  return (
+    data.pronouns === null ||
+    data.company === null ||
+    data.location === null ||
+    data.isConnection === null ||
+    data.imgSrc === null
+  );
+};
+
+const mergeProfileData = (primary: ProfileData, fallback: ProfileData): ProfileData => {
+  return {
+    name: primary.name || fallback.name,
+    imgSrc: primary.imgSrc ?? fallback.imgSrc,
+    pronouns: primary.pronouns ?? fallback.pronouns,
+    subtitle: primary.subtitle ?? fallback.subtitle,
+    company: primary.company ?? fallback.company,
+    location: primary.location ?? fallback.location,
+    isConnection: primary.isConnection ?? fallback.isConnection,
+  };
+};
+
+const profileFromRecord = (
+  record: Record<string, unknown>,
+  imgSrc: string | null,
+): ProfileData | null => {
+  const firstName = getString(record, "firstName");
+  const lastName = getString(record, "lastName");
+
+  if (firstName || lastName) {
+    const name = `${firstName ?? ""} ${lastName ?? ""}`.trim();
+    return {
+      name,
+      imgSrc: imgSrc ?? getVoyagerImage(record),
+      pronouns: null,
+      subtitle: getString(record, "headline"),
+      company: null,
+      location: getString(record, "locationName"),
+      isConnection: getBoolean(record, "isConnection"),
+    };
+  }
+
+  return null;
+};
+
+const parseVoyagerProfile = (json: unknown, imgSrc: string | null): ProfileData | null => {
+  const root = asRecord(json);
+  if (!root) {
+    return null;
+  }
+
+  const rootData = asRecord(root.data);
+  if (rootData) {
+    const parsed = profileFromRecord(rootData, imgSrc);
+    if (parsed) {
+      return parsed;
+    }
+  }
+
+  const elements = root.elements;
+  if (Array.isArray(elements)) {
+    for (const item of elements) {
+      const record = asRecord(item);
+      if (!record) {
+        continue;
+      }
+      const parsed = profileFromRecord(record, imgSrc);
+      if (parsed) {
+        return parsed;
+      }
+    }
+  }
+
+  return null;
+};
+
+const fetchViaVoyager = async (
   profileUrl: string,
   imgSrc: string | null,
+  devMode: boolean,
+): Promise<ProfileData | null> => {
+  const vanityName = extractVanityName(profileUrl);
+  const csrf = getCsrfToken();
+  if (!vanityName || !csrf) {
+    return null;
+  }
+
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), 8000);
+
+  try {
+    const memberIdentityUrl = buildMemberIdentityUrl(vanityName);
+    const response = await fetch(memberIdentityUrl, {
+      headers: {
+        accept: VOYAGER_ACCEPT,
+        "csrf-token": csrf,
+      },
+      credentials: "include",
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      if (devMode) {
+        console.log(`[LinkedIn Extension] Voyager memberIdentity failed: HTTP ${response.status}`);
+      }
+      return null;
+    }
+
+    const parsed = parseVoyagerProfile(await response.json(), imgSrc);
+    if (parsed) {
+      if (devMode) {
+        console.log("[LinkedIn Extension] Voyager memberIdentity succeeded");
+      }
+      return parsed;
+    }
+
+    if (devMode) {
+      console.log("[LinkedIn Extension] Voyager memberIdentity had no parseable profile");
+    }
+    return null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+};
+
+// -- HTML parse fallback --------------------------------------------------------
+
+const fetchViaHtmlParsing = async (
+  profileUrl: string,
+  imgSrc: string | null,
+  devMode: boolean,
 ): Promise<ProfileData> => {
-  // 1. In-memory cache (page lifetime)
-  if (profileCache.has(profileUrl)) {
-    return profileCache.get(profileUrl)!;
-  }
-
-  // 2. chrome.storage.local cache (7-day TTL)
-  const stored = await loadProfileFromStorage(profileUrl);
-  if (stored) {
-    // Prefer the live DOM image if we have one — it may be fresher
-    const data = imgSrc ? { ...stored, imgSrc } : stored;
-    profileCache.set(profileUrl, data);
-    return data;
-  }
-
   const controller = new AbortController();
   const timeoutId = window.setTimeout(() => controller.abort(), 8000);
 
@@ -160,6 +352,9 @@ export const fetchProfileData = async (
     }
 
     const html = await resp.text();
+    if (devMode) {
+      console.log(`[LinkedIn Extension] Fetched profile HTML for ${profileUrl}:\n`, html);
+    }
     const doc = new DOMParser().parseFromString(html, "text/html");
 
     // Name is always in <title> as "First Last | LinkedIn"
@@ -168,7 +363,7 @@ export const fetchProfileData = async (
     // Try primary extraction (heading walk), then fall back to leaf-element walk
     const paragraphData = extractViaHeadingWalk(doc, name) ?? extractViaLeafWalk(doc, name);
 
-    const data: ProfileData = {
+    return {
       name,
       imgSrc: extractImgFromDoc(doc) ?? imgSrc,
       pronouns: paragraphData?.pronouns ?? null,
@@ -177,11 +372,51 @@ export const fetchProfileData = async (
       location: paragraphData?.location ?? null,
       isConnection: extractConnectionDegree(doc),
     };
-
-    profileCache.set(profileUrl, data);
-    await saveProfileToStorage(profileUrl, data);
-    return data;
   } finally {
     clearTimeout(timeoutId);
   }
+};
+
+// -- Main export ----------------------------------------------------------------
+
+export const fetchProfileData = async (
+  profileUrl: string,
+  imgSrc: string | null,
+): Promise<ProfileData> => {
+  const { devMode } = await loadExtensionState();
+
+  // 1. In-memory cache (page lifetime)
+  if (profileCache.has(profileUrl)) {
+    return profileCache.get(profileUrl)!;
+  }
+
+  // 2. chrome.storage.local cache (7-day TTL)
+  const stored = await loadProfileFromStorage(profileUrl);
+  if (stored) {
+    // Prefer the live DOM image if we have one - it may be fresher
+    const data = imgSrc ? { ...stored, imgSrc } : stored;
+    profileCache.set(profileUrl, data);
+    return data;
+  }
+
+  // 3. Preferred path: Voyager JSON API
+  const voyagerData = await fetchViaVoyager(profileUrl, imgSrc, devMode);
+  if (voyagerData) {
+    const finalData = needsHtmlEnrichment(voyagerData)
+      ? mergeProfileData(
+          voyagerData,
+          await fetchViaHtmlParsing(profileUrl, voyagerData.imgSrc, devMode),
+        )
+      : voyagerData;
+
+    profileCache.set(profileUrl, finalData);
+    await saveProfileToStorage(profileUrl, finalData);
+    return finalData;
+  }
+
+  // 4. Fallback path: parse profile HTML
+  const htmlData = await fetchViaHtmlParsing(profileUrl, imgSrc, devMode);
+  profileCache.set(profileUrl, htmlData);
+  await saveProfileToStorage(profileUrl, htmlData);
+  return htmlData;
 };

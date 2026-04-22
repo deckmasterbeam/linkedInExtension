@@ -1,16 +1,17 @@
 // Content script — injected into linkedin.com pages
 // Has access to the page DOM but runs in an isolated JS world.
-import { type ProfileData, resolveImage } from "../shared/profileCache";
-import { fetchProfileData } from "../shared/profileFetcher";
+import { resolveImage } from "../shared/profileCache";
 import { injectStyles, renderPopup, hidePopup } from "./hoverPopup";
 import { loadExtensionState, normalizeProfileUrl, isSuppressedLink } from "../shared/helpers";
+import { getViewerUsername } from "../shared/viewerCache";
+import { fetchProfileData } from "../shared/profileFetcher";
 
 const HIGHLIGHT_ATTR = "data-li-ext-highlighted";
 const PROFILE_LINK_SELECTOR = `a[href^="https://www.linkedin.com/in/"], a[href^="/in/"]`;
 
 /** The canonical URL of the profile page currently being viewed, or null if
  *  this is not a profile page. Used to skip popups on self-referencing links. */
-const currentPageProfileUrl = normalizeProfileUrl(location.href);
+const getCurrentPageProfileUrl = (): string | null => normalizeProfileUrl(location.href);
 
 /** Extract profile picture from the live page DOM surrounding the link. */
 const extractImgFromDOM = (link: HTMLAnchorElement): string | null => {
@@ -18,6 +19,12 @@ const extractImgFromDOM = (link: HTMLAnchorElement): string | null => {
   const img =
     card?.querySelector<HTMLImageElement>('img[src*="licdn"], img[src*="media.li"]') ?? null;
   return img?.src ?? null;
+};
+
+/** Extracts the LinkedIn username slug from a normalised profile URL (/in/username). */
+const usernameFromProfileUrl = (profileUrl: string): string | null => {
+  const match = profileUrl.match(/(?:https:\/\/www\.linkedin\.com)?\/in\/([^/]+)/);
+  return match?.[1] ?? null;
 };
 
 // ── Hover popup ───────────────────────────────────────────────────────────────
@@ -38,7 +45,7 @@ document.addEventListener("mouseover", async (e) => {
 
   clearTimeout(hoverTimer);
   const profileUrl = normalizeProfileUrl(link.href);
-  if (!profileUrl || isSuppressedLink(link, currentPageProfileUrl)) {
+  if (!profileUrl || isSuppressedLink(link, getCurrentPageProfileUrl())) {
     return;
   }
   currentHoverUrl = profileUrl;
@@ -60,14 +67,26 @@ document.addEventListener("mouseover", async (e) => {
     ); // show image immediately
 
     try {
-      const [resolvedImg, data] = await Promise.all([
+      const [resolvedImg, data, viewerUsername] = await Promise.all([
         imgSrc ? resolveImage(imgSrc) : Promise.resolve(null),
         fetchProfileData(profileUrl, imgSrc),
+        getViewerUsername(),
       ]);
       if (currentHoverUrl !== profileUrl) {
         return; // user already moved on
       }
       renderPopup({ ...data, imgSrc: data.imgSrc ?? resolvedImg }, link);
+
+      const viewedUsername = usernameFromProfileUrl(profileUrl);
+      if (viewerUsername && viewedUsername && data.isConnection !== null) {
+        void chrome.runtime.sendMessage({
+          type: "logProfileView",
+          viewerUsername,
+          viewedUsername,
+          isConnected: data.isConnection,
+          viewedAt: new Date().toISOString(),
+        });
+      }
     } catch {
       if (currentHoverUrl === profileUrl) {
         hidePopup();
@@ -93,7 +112,7 @@ export const applyHighlight = (): void => {
   );
   els.forEach((el) => {
     const profileUrl = normalizeProfileUrl(el.href);
-    if (!profileUrl || isSuppressedLink(el, currentPageProfileUrl)) {
+    if (!profileUrl || isSuppressedLink(el, getCurrentPageProfileUrl())) {
       return;
     }
     el.style.backgroundColor = "#cce5ff";
@@ -119,70 +138,34 @@ export const removeHighlight = (): void => {
 // ── Install log ───────────────────────────────────────────────────────────────
 
 /**
- * LinkedIn stores the CSRF token as the value of the JSESSIONID cookie.
- * The value may be bare or double-quoted.
- */
-const getCsrfToken = (): string | null => {
-  const match = document.cookie.match(/JSESSIONID=(?:"([^"]+)"|([^;]+))/);
-  return match?.[1] ?? match?.[2] ?? null;
-};
-
-/**
- * Fetches the logged-in user's LinkedIn username via the Voyager /me API.
- * Runs same-origin (content script is on linkedin.com) so no CORS issues.
- * Returns null on any failure — the log will be retried on the next page load.
- */
-const fetchLinkedInUsername = async (): Promise<string | null> => {
-  const csrf = getCsrfToken();
-  if (!csrf) {
-    return null;
-  }
-  try {
-    const res = await fetch("/voyager/api/me", {
-      headers: {
-        accept: "application/vnd.linkedin.normalized+json+2.1",
-        "csrf-token": csrf,
-      },
-      credentials: "include",
-    });
-    if (!res.ok) {
-      return null;
-    }
-    const data = (await res.json()) as Record<string, unknown>;
-    const profile =
-      (data?.miniProfile as Record<string, unknown> | undefined) ??
-      ((data?.data as Record<string, unknown> | undefined)?.miniProfile as
-        | Record<string, unknown>
-        | undefined);
-    return typeof profile?.publicIdentifier === "string" ? profile.publicIdentifier : null;
-  } catch {
-    return null;
-  }
-};
-
-/**
  * If this is the first page load after install, fetch the user's LinkedIn
  * username and ask the background worker to POST it to the install log API.
  * The flag is cleared only after a successful API response so that a transient
  * failure is retried on the next page load.
  */
-const maybeLogInstall = async (): Promise<void> => {
-  const stored = await chrome.storage.local.get("pendingInstallLog");
-  const pending = stored.pendingInstallLog as { installedAt: string } | undefined;
-  if (!pending) {
+export const maybeLogInstall = async (): Promise<void> => {
+  const { pendingInstallLogTime, devMode } = await loadExtensionState();
+  if (devMode) {
+    console.log("[LinkedIn Extension] Pending install log time:", pendingInstallLogTime);
+  }
+  if (!pendingInstallLogTime) {
     return;
   }
-  const username = await fetchLinkedInUsername();
+  const username = await getViewerUsername();
+  if (devMode) {
+    console.log("[LinkedIn Extension] Viewer username for install log:", username);
+  }
   if (!username) {
     return;
   }
   const response = (await chrome.runtime.sendMessage({
     type: "logInstall",
     username,
-    installedAt: pending.installedAt,
+    installedAt: pendingInstallLogTime,
   })) as { ok: boolean } | undefined;
+
   if (response?.ok) {
-    await chrome.storage.local.remove("pendingInstallLog");
+    await chrome.storage.local.set({ pendingInstallLogTime: "completed" });
   }
 };
 

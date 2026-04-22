@@ -1,6 +1,7 @@
-import { fetchProfileData } from "../profileFetcher";
 import { loadProfileFromStorage, saveProfileToStorage } from "../profileCache";
 import type { ProfileData } from "../profileCache";
+import { getCsrfToken, loadExtensionState } from "../helpers";
+import { fetchProfileData } from "../profileFetcher";
 
 jest.mock("../profileCache", () => ({
   loadProfileFromStorage: jest.fn(),
@@ -9,18 +10,30 @@ jest.mock("../profileCache", () => ({
 
 jest.mock("../helpers", () => ({
   loadExtensionState: jest.fn().mockResolvedValue({ devMode: false }),
+  getCsrfToken: jest.fn().mockReturnValue("fake-csrf-token"),
 }));
 
 const mockLoadFromStorage = loadProfileFromStorage as jest.MockedFunction<
   typeof loadProfileFromStorage
 >;
 const mockSaveToStorage = saveProfileToStorage as jest.MockedFunction<typeof saveProfileToStorage>;
+const mockGetCsrfToken = getCsrfToken as jest.MockedFunction<typeof getCsrfToken>;
+const mockLoadExtensionState = loadExtensionState as jest.MockedFunction<typeof loadExtensionState>;
 
 beforeEach(() => {
   mockLoadFromStorage.mockReset();
   mockLoadFromStorage.mockResolvedValue(null); // default: both caches miss
   mockSaveToStorage.mockReset();
   mockSaveToStorage.mockResolvedValue(undefined);
+  mockGetCsrfToken.mockReset();
+  mockGetCsrfToken.mockReturnValue(null); // skip Voyager in HTML-focused tests
+  mockLoadExtensionState.mockReset();
+  mockLoadExtensionState.mockResolvedValue({
+    devMode: false,
+    popupsEnabled: true,
+    highlighting: false,
+    pendingInstallLogTime: null,
+  });
   globalThis.fetch = jest.fn();
 });
 
@@ -406,6 +419,546 @@ describe("fetchProfileData", () => {
       const result = await fetchProfileData(url, null);
 
       expect(result.isConnection).toBe(false);
+    });
+  });
+
+  // ── Voyager memberIdentity + HTML enrichment ───────────────────────────────
+
+  describe("Voyager memberIdentity", () => {
+    it("uses memberIdentity data and enriches missing fields from HTML", async () => {
+      const url = "https://www.linkedin.com/in/voyager-enrich-user";
+      mockGetCsrfToken.mockReturnValue("fake-csrf-token");
+
+      const voyagerJson = {
+        elements: [
+          {
+            firstName: "Voyager",
+            lastName: "User",
+            headline: "Voyager Headline",
+            locationName: "Voyager City",
+            isConnection: true,
+            profilePicture: {
+              vectorImage: {
+                rootUrl: "https://media.licdn.com/dms/image/",
+                artifacts: [
+                  {
+                    fileIdentifyingUrlPathSegment: "small.jpg",
+                    width: 100,
+                    height: 100,
+                  },
+                  {
+                    fileIdentifyingUrlPathSegment: "large.jpg",
+                    width: 400,
+                    height: 400,
+                  },
+                ],
+              },
+            },
+          },
+        ],
+      };
+
+      (globalThis.fetch as jest.Mock)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve(voyagerJson),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          text: () =>
+            Promise.resolve(
+              makeHeadingHtml({
+                name: "Voyager User",
+                pronouns: "They/Them",
+                subtitle: "HTML Subtitle",
+                company: "HTML Company",
+                location: "HTML City",
+                networkDistance: "Distance2",
+              }),
+            ),
+        });
+
+      const result = await fetchProfileData(url, null);
+
+      expect((globalThis.fetch as jest.Mock).mock.calls[0][0]).toContain(
+        "/voyager/api/identity/dash/profiles?q=memberIdentity&memberIdentity=voyager-enrich-user",
+      );
+      expect((globalThis.fetch as jest.Mock).mock.calls[1][0]).toBe(url);
+
+      // Keep Voyager values where present
+      expect(result.subtitle).toBe("Voyager Headline");
+      expect(result.location).toBe("Voyager City");
+      expect(result.isConnection).toBe(true);
+      expect(result.imgSrc).toBe("https://media.licdn.com/dms/image/large.jpg");
+
+      // Fill missing values from HTML
+      expect(result.pronouns).toBe("They/Them");
+      expect(result.company).toBe("HTML Company");
+    });
+
+    it("falls back to HTML when memberIdentity returns non-ok", async () => {
+      const url = "https://www.linkedin.com/in/voyager-http-fail";
+      mockGetCsrfToken.mockReturnValue("fake-csrf-token");
+
+      (globalThis.fetch as jest.Mock)
+        .mockResolvedValueOnce({ ok: false, status: 410 })
+        .mockResolvedValueOnce({
+          ok: true,
+          text: () => Promise.resolve(makeHeadingHtml({ name: "HTML Fallback" })),
+        });
+
+      const result = await fetchProfileData(url, null);
+
+      expect(globalThis.fetch as jest.Mock).toHaveBeenCalledTimes(2);
+      expect(result.name).toBe("HTML Fallback");
+    });
+
+    it("falls back to HTML when memberIdentity has no parseable profile", async () => {
+      const url = "https://www.linkedin.com/in/voyager-unparseable";
+      mockGetCsrfToken.mockReturnValue("fake-csrf-token");
+
+      (globalThis.fetch as jest.Mock)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ elements: [{ foo: "bar" }] }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          text: () => Promise.resolve(makeHeadingHtml({ name: "Unparseable Voyager" })),
+        });
+
+      const result = await fetchProfileData(url, null);
+
+      expect(globalThis.fetch as jest.Mock).toHaveBeenCalledTimes(2);
+      expect(result.name).toBe("Unparseable Voyager");
+    });
+
+    it("handles a null voyager JSON payload by falling back to HTML", async () => {
+      const url = "https://www.linkedin.com/in/voyager-null-root";
+      mockGetCsrfToken.mockReturnValue("fake-csrf-token");
+
+      (globalThis.fetch as jest.Mock)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve(null),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          text: () => Promise.resolve(makeHeadingHtml({ name: "Null Root Fallback" })),
+        });
+
+      const result = await fetchProfileData(url, null);
+
+      expect(result.name).toBe("Null Root Fallback");
+    });
+
+    it("parses voyager data from the root data object", async () => {
+      const url = "https://www.linkedin.com/in/voyager-root-data";
+      mockGetCsrfToken.mockReturnValue("fake-csrf-token");
+
+      (globalThis.fetch as jest.Mock)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              data: {
+                firstName: "Root",
+                lastName: "Data",
+                headline: "From root data",
+                locationName: "Root City",
+              },
+            }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          text: () => Promise.resolve(makeHeadingHtml({ name: "Root Data" })),
+        });
+
+      const result = await fetchProfileData(url, null);
+
+      expect(result.name).toBe("Root Data");
+      expect(result.subtitle).toBe("From root data");
+      expect(result.location).toBe("Root City");
+    });
+
+    it("skips non-object entries in elements and parses the next valid record", async () => {
+      const url = "https://www.linkedin.com/in/voyager-elements-non-object";
+      mockGetCsrfToken.mockReturnValue("fake-csrf-token");
+
+      (globalThis.fetch as jest.Mock)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              elements: [null, { firstName: "Elem", lastName: "Valid" }],
+            }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          text: () => Promise.resolve(makeHeadingHtml({ name: "Elem Valid" })),
+        });
+
+      const result = await fetchProfileData(url, null);
+
+      expect(result.name).toBe("Elem Valid");
+    });
+
+    it("falls back when profilePicture is missing", async () => {
+      const url = "https://www.linkedin.com/in/voyager-no-picture";
+      mockGetCsrfToken.mockReturnValue("fake-csrf-token");
+
+      (globalThis.fetch as jest.Mock)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              elements: [{ firstName: "No", lastName: "Picture" }],
+            }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          text: () =>
+            Promise.resolve(
+              makeHeadingHtml({
+                name: "No Picture",
+                profileImg:
+                  "https://media.licdn.com/dms/image/profile-displayphoto-shrink_800_800/no-picture.jpg",
+              }),
+            ),
+        });
+
+      const result = await fetchProfileData(url, null);
+
+      expect(result.imgSrc).toContain("no-picture.jpg");
+    });
+
+    it("falls back when vectorImage is missing", async () => {
+      const url = "https://www.linkedin.com/in/voyager-no-vector";
+      mockGetCsrfToken.mockReturnValue("fake-csrf-token");
+
+      (globalThis.fetch as jest.Mock)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              elements: [
+                {
+                  firstName: "No",
+                  lastName: "Vector",
+                  profilePicture: {},
+                },
+              ],
+            }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          text: () =>
+            Promise.resolve(
+              makeHeadingHtml({
+                name: "No Vector",
+                profileImg:
+                  "https://media.licdn.com/dms/image/profile-displayphoto-shrink_800_800/no-vector.jpg",
+              }),
+            ),
+        });
+
+      const result = await fetchProfileData(url, null);
+
+      expect(result.imgSrc).toContain("no-vector.jpg");
+    });
+
+    it("falls back when vectorImage has no usable artifacts (empty artifacts path)", async () => {
+      const url = "https://www.linkedin.com/in/voyager-empty-artifacts";
+      mockGetCsrfToken.mockReturnValue("fake-csrf-token");
+
+      (globalThis.fetch as jest.Mock)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              elements: [
+                {
+                  firstName: "Empty",
+                  lastName: "Artifacts",
+                  profilePicture: {
+                    vectorImage: {
+                      rootUrl: "https://media.licdn.com/dms/image/",
+                      artifacts: [],
+                    },
+                  },
+                },
+              ],
+            }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          text: () =>
+            Promise.resolve(
+              makeHeadingHtml({
+                name: "Empty Artifacts",
+                profileImg:
+                  "https://media.licdn.com/dms/image/profile-displayphoto-shrink_800_800/empty-artifacts.jpg",
+              }),
+            ),
+        });
+
+      const result = await fetchProfileData(url, null);
+
+      expect(result.imgSrc).toContain("empty-artifacts.jpg");
+    });
+
+    it("skips invalid artifacts and continues until a valid artifact exists", async () => {
+      const url = "https://www.linkedin.com/in/voyager-artifact-continue";
+      mockGetCsrfToken.mockReturnValue("fake-csrf-token");
+
+      (globalThis.fetch as jest.Mock)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              elements: [
+                {
+                  firstName: "Artifact",
+                  lastName: "Continue",
+                  profilePicture: {
+                    vectorImage: {
+                      rootUrl: "https://media.licdn.com/dms/image/",
+                      artifacts: [
+                        null,
+                        {},
+                        { fileIdentifyingUrlPathSegment: "valid.jpg", width: 40, height: 40 },
+                      ],
+                    },
+                  },
+                },
+              ],
+            }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          text: () => Promise.resolve(makeHeadingHtml({ name: "Artifact Continue" })),
+        });
+
+      const result = await fetchProfileData(url, null);
+
+      expect(result.imgSrc).toBe("https://media.licdn.com/dms/image/valid.jpg");
+    });
+
+    it("falls back when vectorImage lacks rootUrl even with artifacts", async () => {
+      const url = "https://www.linkedin.com/in/voyager-no-root-url";
+      mockGetCsrfToken.mockReturnValue("fake-csrf-token");
+
+      (globalThis.fetch as jest.Mock)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              elements: [
+                {
+                  firstName: "No",
+                  lastName: "RootUrl",
+                  profilePicture: {
+                    vectorImage: {
+                      artifacts: [
+                        { fileIdentifyingUrlPathSegment: "x.jpg", width: 40, height: 40 },
+                      ],
+                    },
+                  },
+                },
+              ],
+            }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          text: () =>
+            Promise.resolve(
+              makeHeadingHtml({
+                name: "No RootUrl",
+                profileImg:
+                  "https://media.licdn.com/dms/image/profile-displayphoto-shrink_800_800/no-root.jpg",
+              }),
+            ),
+        });
+
+      const result = await fetchProfileData(url, null);
+
+      expect(result.imgSrc).toContain("no-root.jpg");
+    });
+
+    it("logs the failure branch in dev mode", async () => {
+      const url = "https://www.linkedin.com/in/voyager-dev-fail";
+      mockGetCsrfToken.mockReturnValue("fake-csrf-token");
+      mockLoadExtensionState.mockResolvedValue({
+        devMode: true,
+        popupsEnabled: true,
+        highlighting: false,
+        pendingInstallLogTime: null,
+      });
+      const logSpy = jest.spyOn(console, "log").mockImplementation(() => undefined);
+
+      (globalThis.fetch as jest.Mock)
+        .mockResolvedValueOnce({ ok: false, status: 500 })
+        .mockResolvedValueOnce({
+          ok: true,
+          text: () => Promise.resolve(makeHeadingHtml({ name: "Dev Fail" })),
+        });
+
+      await fetchProfileData(url, null);
+
+      expect(logSpy).toHaveBeenCalledWith(
+        "[LinkedIn Extension] Voyager memberIdentity failed: HTTP 500",
+      );
+      logSpy.mockRestore();
+    });
+
+    it("logs success in dev mode", async () => {
+      const url = "https://www.linkedin.com/in/voyager-dev-success";
+      mockGetCsrfToken.mockReturnValue("fake-csrf-token");
+      mockLoadExtensionState.mockResolvedValue({
+        devMode: true,
+        popupsEnabled: true,
+        highlighting: false,
+        pendingInstallLogTime: null,
+      });
+      const logSpy = jest.spyOn(console, "log").mockImplementation(() => undefined);
+
+      (globalThis.fetch as jest.Mock)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ elements: [{ firstName: "Dev", lastName: "Success" }] }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          text: () => Promise.resolve(makeHeadingHtml({ name: "Dev Success" })),
+        });
+
+      await fetchProfileData(url, null);
+
+      expect(logSpy).toHaveBeenCalledWith("[LinkedIn Extension] Voyager memberIdentity succeeded");
+      logSpy.mockRestore();
+    });
+
+    it("logs no-parse in dev mode", async () => {
+      const url = "https://www.linkedin.com/in/voyager-dev-no-parse";
+      mockGetCsrfToken.mockReturnValue("fake-csrf-token");
+      mockLoadExtensionState.mockResolvedValue({
+        devMode: true,
+        popupsEnabled: true,
+        highlighting: false,
+        pendingInstallLogTime: null,
+      });
+      const logSpy = jest.spyOn(console, "log").mockImplementation(() => undefined);
+
+      (globalThis.fetch as jest.Mock)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ elements: [{ foo: "bar" }] }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          text: () => Promise.resolve(makeHeadingHtml({ name: "Dev No Parse" })),
+        });
+
+      await fetchProfileData(url, null);
+
+      expect(logSpy).toHaveBeenCalledWith(
+        "[LinkedIn Extension] Voyager memberIdentity had no parseable profile",
+      );
+      logSpy.mockRestore();
+    });
+
+    it("falls back to HTML when memberIdentity fetch throws", async () => {
+      const url = "https://www.linkedin.com/in/voyager-throws";
+      mockGetCsrfToken.mockReturnValue("fake-csrf-token");
+
+      (globalThis.fetch as jest.Mock)
+        .mockRejectedValueOnce(new Error("network down"))
+        .mockResolvedValueOnce({
+          ok: true,
+          text: () => Promise.resolve(makeHeadingHtml({ name: "Thrown Fetch Fallback" })),
+        });
+
+      const result = await fetchProfileData(url, null);
+
+      expect(result.name).toBe("Thrown Fetch Fallback");
+    });
+
+    it("continues from unparseable root data to a parseable elements entry", async () => {
+      const url = "https://www.linkedin.com/in/voyager-root-unparseable-elements-parseable";
+      mockGetCsrfToken.mockReturnValue("fake-csrf-token");
+
+      (globalThis.fetch as jest.Mock)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              data: { foo: "bar" },
+              elements: [{ firstName: "Element", lastName: "Parsed" }],
+            }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          text: () => Promise.resolve(makeHeadingHtml({ name: "Element Parsed" })),
+        });
+
+      const result = await fetchProfileData(url, null);
+
+      expect(result.name).toBe("Element Parsed");
+    });
+
+    it("falls back when root data is unparseable and elements is not an array", async () => {
+      const url = "https://www.linkedin.com/in/voyager-no-elements-array";
+      mockGetCsrfToken.mockReturnValue("fake-csrf-token");
+
+      (globalThis.fetch as jest.Mock)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ data: { foo: "bar" }, elements: "nope" }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          text: () => Promise.resolve(makeHeadingHtml({ name: "No Elements Array" })),
+        });
+
+      const result = await fetchProfileData(url, null);
+
+      expect(result.name).toBe("No Elements Array");
+    });
+
+    it("keeps the largest artifact when later artifacts are smaller", async () => {
+      const url = "https://www.linkedin.com/in/voyager-largest-artifact-stays";
+      mockGetCsrfToken.mockReturnValue("fake-csrf-token");
+
+      (globalThis.fetch as jest.Mock)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              elements: [
+                {
+                  firstName: "Largest",
+                  lastName: "Artifact",
+                  profilePicture: {
+                    vectorImage: {
+                      rootUrl: "https://media.licdn.com/dms/image/",
+                      artifacts: [
+                        { fileIdentifyingUrlPathSegment: "big.jpg", width: 500, height: 500 },
+                        { fileIdentifyingUrlPathSegment: "small.jpg", width: 40, height: 40 },
+                      ],
+                    },
+                  },
+                },
+              ],
+            }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          text: () => Promise.resolve(makeHeadingHtml({ name: "Largest Artifact" })),
+        });
+
+      const result = await fetchProfileData(url, null);
+
+      expect(result.imgSrc).toBe("https://media.licdn.com/dms/image/big.jpg");
     });
   });
 });

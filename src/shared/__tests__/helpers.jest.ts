@@ -1,4 +1,9 @@
-import { normalizeProfileUrl, isSuppressedLink, loadExtensionState } from "../helpers";
+import {
+  normalizeProfileUrl,
+  isSuppressedLink,
+  loadExtensionState,
+  getCsrfToken,
+} from "../helpers";
 
 // ── chrome stub (for loadExtensionState tests) ────────────────────────────────
 // Must be set up before any module that references `chrome` is imported.
@@ -231,7 +236,12 @@ describe("loadExtensionState", () => {
 
     const state = await loadExtensionState();
 
-    expect(state).toEqual({ devMode: true, popupsEnabled: false, highlighting: true });
+    expect(state).toEqual({
+      devMode: true,
+      popupsEnabled: false,
+      highlighting: true,
+      pendingInstallLogTime: null,
+    });
   });
 
   it("defaults devMode to false when missing", async () => {
@@ -288,5 +298,36 @@ describe("loadExtensionState", () => {
     await loadExtensionState();
 
     expect(storageMock.set).not.toHaveBeenCalled();
+  });
+});
+
+// ── getCsrfToken ──────────────────────────────────────────────────────────────
+
+describe("getCsrfToken", () => {
+  it("returns the token when JSESSIONID is quoted", () => {
+    Object.defineProperty(document, "cookie", {
+      configurable: true,
+      value: 'li_at=abc; JSESSIONID="ajax:123456"; lang=v=2',
+    });
+
+    expect(getCsrfToken()).toBe("ajax:123456");
+  });
+
+  it("returns the token when JSESSIONID is unquoted", () => {
+    Object.defineProperty(document, "cookie", {
+      configurable: true,
+      value: "li_at=abc; JSESSIONID=ajax:987654; lang=v=2",
+    });
+
+    expect(getCsrfToken()).toBe("ajax:987654");
+  });
+
+  it("returns null when JSESSIONID cookie is missing", () => {
+    Object.defineProperty(document, "cookie", {
+      configurable: true,
+      value: "li_at=abc; lang=v=2",
+    });
+
+    expect(getCsrfToken()).toBeNull();
   });
 });
