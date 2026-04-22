@@ -26,6 +26,7 @@ type ExtensionState = {
   devMode: boolean;
   popupsEnabled: boolean;
   highlighting: boolean;
+  telemetryLogging: boolean;
   pendingInstallLogTime: string | null;
 };
 
@@ -77,6 +78,7 @@ const loadContentModule = async (
     devMode: false,
     popupsEnabled: true,
     highlighting: false,
+    telemetryLogging: false,
     pendingInstallLogTime: null,
     ...stateOverrides,
   };
@@ -186,8 +188,11 @@ describe("content.ts", () => {
     jest.useRealTimers();
   });
 
-  it("sets pendingInstallLogTime to completed after a successful API submission", async () => {
-    const setup = await loadContentModule({ pendingInstallLogTime: "2026-04-21T12:00:00.000Z" });
+  it("sends the install log message when telemetry is opted in", async () => {
+    const setup = await loadContentModule({
+      pendingInstallLogTime: "2026-04-21T12:00:00.000Z",
+      telemetryLogging: true,
+    });
     setup.getViewerUsernameMock.mockResolvedValue("janedoe");
     setup.sendMessageMock.mockResolvedValue({ ok: true });
 
@@ -198,11 +203,25 @@ describe("content.ts", () => {
       username: "janedoe",
       installedAt: "2026-04-21T12:00:00.000Z",
     });
-    expect(setup.setMock).toHaveBeenCalledWith({ pendingInstallLogTime: "completed" });
+  });
+
+  it("skips the install log message when telemetry is not opted in", async () => {
+    const setup = await loadContentModule({
+      pendingInstallLogTime: "2026-04-21T12:00:00.000Z",
+      telemetryLogging: false,
+    });
+    setup.getViewerUsernameMock.mockResolvedValue("janedoe");
+
+    await setup.content.maybeLogInstall();
+
+    expect(setup.sendMessageMock).not.toHaveBeenCalled();
   });
 
   it("leaves pendingInstallLogTime unchanged when the API submission fails", async () => {
-    const setup = await loadContentModule({ pendingInstallLogTime: "2026-04-21T12:00:00.000Z" });
+    const setup = await loadContentModule({
+      pendingInstallLogTime: "2026-04-21T12:00:00.000Z",
+      telemetryLogging: true,
+    });
     setup.getViewerUsernameMock.mockResolvedValue("janedoe");
     setup.sendMessageMock.mockResolvedValue({ ok: false });
 
@@ -308,7 +327,7 @@ describe("content.ts", () => {
   });
 
   it("renders popup content and logs a profile view on hover", async () => {
-    const setup = await loadContentModule();
+    const setup = await loadContentModule({ telemetryLogging: true });
     const card = document.createElement("li");
     const img = document.createElement("img");
     img.src = "https://media.licdn.com/dms/image/test";
@@ -370,6 +389,44 @@ describe("content.ts", () => {
         viewedUsername: "janedoe",
         isConnected: true,
       }),
+    );
+  });
+
+  it("does not log a profile view when telemetry logging is disabled", async () => {
+    const setup = await loadContentModule({ telemetryLogging: false });
+    const card = document.createElement("li");
+    const img = document.createElement("img");
+    img.src = "https://media.licdn.com/dms/image/test";
+    const link = document.createElement("a");
+    link.href = makeProfileUrl("janedoe");
+    link.textContent = "janedoe";
+    card.appendChild(img);
+    card.appendChild(link);
+    document.body.appendChild(card);
+
+    setup.getViewerUsernameMock.mockResolvedValue("viewer1");
+    setup.resolveImageMock.mockResolvedValue("resolved-image");
+    setup.fetchProfileDataMock.mockResolvedValue({
+      name: "Jane Doe",
+      imgSrc: null,
+      pronouns: null,
+      subtitle: null,
+      company: null,
+      location: null,
+      isConnection: true,
+    });
+
+    await invokeDocumentListener(
+      setup.documentListeners.mouseover,
+      makeMouseEvent("mouseover", link),
+    );
+    await flushPromises();
+    await jest.advanceTimersByTimeAsync(350);
+    await flushPromises();
+
+    expect(setup.renderPopupMock).toHaveBeenCalled();
+    expect(setup.sendMessageMock).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "logProfileView" }),
     );
   });
 

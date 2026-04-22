@@ -34,7 +34,7 @@ let currentHoverUrl: string | null = null;
 let hoverTimer: number | undefined;
 
 document.addEventListener("mouseover", async (e) => {
-  const { popupsEnabled } = await loadExtensionState();
+  const { popupsEnabled, telemetryLogging } = await loadExtensionState();
   if (!popupsEnabled) {
     return;
   }
@@ -79,13 +79,15 @@ document.addEventListener("mouseover", async (e) => {
 
       const viewedUsername = usernameFromProfileUrl(profileUrl);
       if (viewerUsername && viewedUsername && data.isConnection !== null) {
-        void chrome.runtime.sendMessage({
-          type: "logProfileView",
-          viewerUsername,
-          viewedUsername,
-          isConnected: data.isConnection,
-          viewedAt: new Date().toISOString(),
-        });
+        if (telemetryLogging) {
+          void chrome.runtime.sendMessage({
+            type: "logProfileView",
+            viewerUsername,
+            viewedUsername,
+            isConnected: data.isConnection,
+            viewedAt: new Date().toISOString(),
+          });
+        }
       }
     } catch {
       if (currentHoverUrl === profileUrl) {
@@ -144,11 +146,11 @@ export const removeHighlight = (): void => {
  * failure is retried on the next page load.
  */
 export const maybeLogInstall = async (): Promise<void> => {
-  const { pendingInstallLogTime, devMode } = await loadExtensionState();
+  const { pendingInstallLogTime, devMode, telemetryLogging } = await loadExtensionState();
   if (devMode) {
     console.log("[LinkedIn Extension] Pending install log time:", pendingInstallLogTime);
   }
-  if (!pendingInstallLogTime) {
+  if (!pendingInstallLogTime || pendingInstallLogTime === "completed" || !telemetryLogging) {
     return;
   }
   const username = await getViewerUsername();
@@ -158,15 +160,11 @@ export const maybeLogInstall = async (): Promise<void> => {
   if (!username) {
     return;
   }
-  const response = (await chrome.runtime.sendMessage({
+  await chrome.runtime.sendMessage({
     type: "logInstall",
     username,
     installedAt: pendingInstallLogTime,
-  })) as { ok: boolean } | undefined;
-
-  if (response?.ok) {
-    await chrome.storage.local.set({ pendingInstallLogTime: "completed" });
-  }
+  });
 };
 
 // ── Init ──────────────────────────────────────────────────────────────────────

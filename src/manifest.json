@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "LinkedIn Extension",
+  "name": "LinkedIn Profile Popups",
   "version": "1.0.0",
-  "description": "A Chrome extension for LinkedIn",
+  "description": "A Chrome extension for LinkedIn to show profile popups when hovering over a profile image",
   "permissions": ["activeTab", "storage"],
   "host_permissions": ["https://www.linkedin.com/*", "https://linked-in-extension.vercel.app/*"],
   "action": {

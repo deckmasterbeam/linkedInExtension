@@ -9,15 +9,17 @@ const devModeRow = document.getElementById("dev-mode-row") as HTMLLabelElement;
 
 const popupToggle = document.getElementById("popup-toggle") as HTMLInputElement;
 const highlightToggle = document.getElementById("highlight-toggle") as HTMLInputElement;
+const telemetryLoggingToggle = document.getElementById("logging-toggle") as HTMLInputElement;
 const devModeToggle = document.getElementById("dev-mode-toggle") as HTMLInputElement;
 
 const setDevModeUI = async (): Promise<void> => {
-  const { devMode, popupsEnabled, highlighting } = await loadExtensionState();
+  const { devMode, popupsEnabled, highlighting, telemetryLogging } = await loadExtensionState();
   devModeToggle.checked = devMode;
   highlightSection.style.display = devMode ? "flex" : "none";
   viewCacheSection.style.display = devMode ? "flex" : "none";
   popupToggle.checked = popupsEnabled;
   highlightToggle.checked = highlighting;
+  telemetryLoggingToggle.checked = telemetryLogging;
 };
 
 const checkCurrentTab = async (): Promise<void> => {
@@ -62,6 +64,11 @@ highlightToggle.addEventListener("change", async () => {
   await chrome.storage.local.set({ highlighting: next });
   const response = await sendToActiveTab({ action: "setHighlight", enabled: next });
   highlightToggle.checked = response?.enabled ?? next;
+});
+
+telemetryLoggingToggle.addEventListener("change", async () => {
+  const next = telemetryLoggingToggle.checked;
+  await chrome.storage.local.set({ telemetryLogging: next });
 });
 
 devModeToggle.addEventListener("change", async () => {

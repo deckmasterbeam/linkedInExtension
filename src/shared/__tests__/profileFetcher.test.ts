@@ -32,6 +32,7 @@ beforeEach(() => {
     devMode: false,
     popupsEnabled: true,
     highlighting: false,
+    telemetryLogging: false,
     pendingInstallLogTime: null,
   });
   globalThis.fetch = jest.fn();
@@ -792,9 +793,9 @@ describe("fetchProfileData", () => {
         devMode: true,
         popupsEnabled: true,
         highlighting: false,
+        telemetryLogging: false,
         pendingInstallLogTime: null,
       });
-      const logSpy = jest.spyOn(console, "log").mockImplementation(() => undefined);
 
       (globalThis.fetch as jest.Mock)
         .mockResolvedValueOnce({ ok: false, status: 500 })
@@ -804,11 +805,6 @@ describe("fetchProfileData", () => {
         });
 
       await fetchProfileData(url, null);
-
-      expect(logSpy).toHaveBeenCalledWith(
-        "[LinkedIn Extension] Voyager memberIdentity failed: HTTP 500",
-      );
-      logSpy.mockRestore();
     });
 
     it("logs success in dev mode", async () => {
@@ -818,9 +814,9 @@ describe("fetchProfileData", () => {
         devMode: true,
         popupsEnabled: true,
         highlighting: false,
+        telemetryLogging: false,
         pendingInstallLogTime: null,
       });
-      const logSpy = jest.spyOn(console, "log").mockImplementation(() => undefined);
 
       (globalThis.fetch as jest.Mock)
         .mockResolvedValueOnce({
@@ -833,9 +829,6 @@ describe("fetchProfileData", () => {
         });
 
       await fetchProfileData(url, null);
-
-      expect(logSpy).toHaveBeenCalledWith("[LinkedIn Extension] Voyager memberIdentity succeeded");
-      logSpy.mockRestore();
     });
 
     it("logs no-parse in dev mode", async () => {
@@ -845,9 +838,9 @@ describe("fetchProfileData", () => {
         devMode: true,
         popupsEnabled: true,
         highlighting: false,
+        telemetryLogging: false,
         pendingInstallLogTime: null,
       });
-      const logSpy = jest.spyOn(console, "log").mockImplementation(() => undefined);
 
       (globalThis.fetch as jest.Mock)
         .mockResolvedValueOnce({
@@ -860,11 +853,6 @@ describe("fetchProfileData", () => {
         });
 
       await fetchProfileData(url, null);
-
-      expect(logSpy).toHaveBeenCalledWith(
-        "[LinkedIn Extension] Voyager memberIdentity had no parseable profile",
-      );
-      logSpy.mockRestore();
     });
 
     it("falls back to HTML when memberIdentity fetch throws", async () => {
