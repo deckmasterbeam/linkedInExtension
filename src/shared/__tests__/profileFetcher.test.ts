@@ -32,7 +32,7 @@ beforeEach(() => {
     devMode: false,
     popupsEnabled: true,
     highlighting: false,
-    profileViewLogging: false,
+    telemetryLogging: false,
     pendingInstallLogTime: null,
   });
   globalThis.fetch = jest.fn();
@@ -793,7 +793,7 @@ describe("fetchProfileData", () => {
         devMode: true,
         popupsEnabled: true,
         highlighting: false,
-        profileViewLogging: false,
+        telemetryLogging: false,
         pendingInstallLogTime: null,
       });
 
@@ -814,7 +814,7 @@ describe("fetchProfileData", () => {
         devMode: true,
         popupsEnabled: true,
         highlighting: false,
-        profileViewLogging: false,
+        telemetryLogging: false,
         pendingInstallLogTime: null,
       });
 
@@ -838,7 +838,7 @@ describe("fetchProfileData", () => {
         devMode: true,
         popupsEnabled: true,
         highlighting: false,
-        profileViewLogging: false,
+        telemetryLogging: false,
         pendingInstallLogTime: null,
       });
 

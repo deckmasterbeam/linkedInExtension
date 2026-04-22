@@ -26,7 +26,7 @@ type ExtensionState = {
   devMode: boolean;
   popupsEnabled: boolean;
   highlighting: boolean;
-  profileViewLogging: boolean;
+  telemetryLogging: boolean;
   pendingInstallLogTime: string | null;
 };
 
@@ -78,7 +78,7 @@ const loadContentModule = async (
     devMode: false,
     popupsEnabled: true,
     highlighting: false,
-    profileViewLogging: false,
+    telemetryLogging: false,
     pendingInstallLogTime: null,
     ...stateOverrides,
   };
@@ -188,8 +188,11 @@ describe("content.ts", () => {
     jest.useRealTimers();
   });
 
-  it("sets pendingInstallLogTime to completed after a successful API submission", async () => {
-    const setup = await loadContentModule({ pendingInstallLogTime: "2026-04-21T12:00:00.000Z" });
+  it("sends the install log message when telemetry is opted in", async () => {
+    const setup = await loadContentModule({
+      pendingInstallLogTime: "2026-04-21T12:00:00.000Z",
+      telemetryLogging: true,
+    });
     setup.getViewerUsernameMock.mockResolvedValue("janedoe");
     setup.sendMessageMock.mockResolvedValue({ ok: true });
 
@@ -202,8 +205,23 @@ describe("content.ts", () => {
     });
   });
 
+  it("skips the install log message when telemetry is not opted in", async () => {
+    const setup = await loadContentModule({
+      pendingInstallLogTime: "2026-04-21T12:00:00.000Z",
+      telemetryLogging: false,
+    });
+    setup.getViewerUsernameMock.mockResolvedValue("janedoe");
+
+    await setup.content.maybeLogInstall();
+
+    expect(setup.sendMessageMock).not.toHaveBeenCalled();
+  });
+
   it("leaves pendingInstallLogTime unchanged when the API submission fails", async () => {
-    const setup = await loadContentModule({ pendingInstallLogTime: "2026-04-21T12:00:00.000Z" });
+    const setup = await loadContentModule({
+      pendingInstallLogTime: "2026-04-21T12:00:00.000Z",
+      telemetryLogging: true,
+    });
     setup.getViewerUsernameMock.mockResolvedValue("janedoe");
     setup.sendMessageMock.mockResolvedValue({ ok: false });
 
@@ -309,7 +327,7 @@ describe("content.ts", () => {
   });
 
   it("renders popup content and logs a profile view on hover", async () => {
-    const setup = await loadContentModule({ profileViewLogging: true });
+    const setup = await loadContentModule({ telemetryLogging: true });
     const card = document.createElement("li");
     const img = document.createElement("img");
     img.src = "https://media.licdn.com/dms/image/test";
@@ -374,8 +392,8 @@ describe("content.ts", () => {
     );
   });
 
-  it("does not log a profile view when profile view logging is disabled", async () => {
-    const setup = await loadContentModule({ profileViewLogging: false });
+  it("does not log a profile view when telemetry logging is disabled", async () => {
+    const setup = await loadContentModule({ telemetryLogging: false });
     const card = document.createElement("li");
     const img = document.createElement("img");
     img.src = "https://media.licdn.com/dms/image/test";

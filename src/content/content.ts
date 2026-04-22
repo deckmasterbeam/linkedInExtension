@@ -34,7 +34,7 @@ let currentHoverUrl: string | null = null;
 let hoverTimer: number | undefined;
 
 document.addEventListener("mouseover", async (e) => {
-  const { popupsEnabled, profileViewLogging } = await loadExtensionState();
+  const { popupsEnabled, telemetryLogging } = await loadExtensionState();
   if (!popupsEnabled) {
     return;
   }
@@ -79,7 +79,7 @@ document.addEventListener("mouseover", async (e) => {
 
       const viewedUsername = usernameFromProfileUrl(profileUrl);
       if (viewerUsername && viewedUsername && data.isConnection !== null) {
-        if (profileViewLogging) {
+        if (telemetryLogging) {
           void chrome.runtime.sendMessage({
             type: "logProfileView",
             viewerUsername,
@@ -146,11 +146,11 @@ export const removeHighlight = (): void => {
  * failure is retried on the next page load.
  */
 export const maybeLogInstall = async (): Promise<void> => {
-  const { pendingInstallLogTime, devMode } = await loadExtensionState();
+  const { pendingInstallLogTime, devMode, telemetryLogging } = await loadExtensionState();
   if (devMode) {
     console.log("[LinkedIn Extension] Pending install log time:", pendingInstallLogTime);
   }
-  if (!pendingInstallLogTime || pendingInstallLogTime === "completed") {
+  if (!pendingInstallLogTime || pendingInstallLogTime === "completed" || !telemetryLogging) {
     return;
   }
   const username = await getViewerUsername();

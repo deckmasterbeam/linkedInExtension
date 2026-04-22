@@ -240,7 +240,7 @@ describe("loadExtensionState", () => {
       devMode: true,
       popupsEnabled: false,
       highlighting: true,
-      profileViewLogging: false,
+      telemetryLogging: false,
       pendingInstallLogTime: null,
     });
   });
@@ -298,7 +298,7 @@ describe("loadExtensionState", () => {
       devMode: false,
       popupsEnabled: true,
       highlighting: false,
-      profileViewLogging: false,
+      telemetryLogging: false,
     });
 
     await loadExtensionState();
