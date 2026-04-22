@@ -260,6 +260,36 @@ describe("content.ts", () => {
     expect(link.getAttribute("data-li-ext-highlighted")).toBeNull();
   });
 
+  it("re-evaluates current page profile URL after history navigation", async () => {
+    const setup = await loadContentModule();
+    createLink("janedoe");
+
+    setup.normalizeProfileUrlMock.mockImplementation((href: string) => {
+      if (href === location.href) {
+        const match = new URL(href).pathname.match(/^\/in\/([^/?#]+)/);
+        return match ? makeProfileUrl(match[1]) : null;
+      }
+      const linkMatch =
+        href.match(/linkedin\.com\/in\/([^/?#]+)/) ?? href.match(/^\/in\/([^/?#]+)/);
+      return linkMatch ? makeProfileUrl(linkMatch[1]) : null;
+    });
+
+    setup.isSuppressedLinkMock.mockReturnValue(false);
+
+    history.pushState({}, "", "/in/janedoe");
+    setup.content.applyHighlight();
+    const firstCurrentPageArg =
+      setup.isSuppressedLinkMock.mock.calls[setup.isSuppressedLinkMock.mock.calls.length - 1]?.[1];
+
+    history.pushState({}, "", "/in/johnsmith");
+    setup.content.applyHighlight();
+    const secondCurrentPageArg =
+      setup.isSuppressedLinkMock.mock.calls[setup.isSuppressedLinkMock.mock.calls.length - 1]?.[1];
+
+    expect(firstCurrentPageArg).toBe(makeProfileUrl("janedoe"));
+    expect(secondCurrentPageArg).toBe(makeProfileUrl("johnsmith"));
+  });
+
   it("removes highlight styles and hides the popup", async () => {
     const setup = await loadContentModule();
     const link = createLink("janedoe");

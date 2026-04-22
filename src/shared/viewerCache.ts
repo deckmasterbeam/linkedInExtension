@@ -1,18 +1,11 @@
+import { getCsrfToken } from "./helpers";
+
 const VIEWER_CACHE_KEY = "li_ext_viewer";
 
 interface ViewerCache {
   csrf: string;
   username: string;
 }
-
-/**
- * LinkedIn stores the CSRF token as the value of the JSESSIONID cookie.
- * The value may be bare or double-quoted.
- */
-const getCsrfToken = (): string | null => {
-  const match = document.cookie.match(/JSESSIONID=(?:"([^"]+)"|([^;]+))/);
-  return match?.[1] ?? match?.[2] ?? null;
-};
 
 /**
  * Fetches the logged-in user's LinkedIn username via the Voyager /me API.

@@ -92,3 +92,9 @@ export const isSuppressedLink = (
   }
   return false;
 };
+
+/** Reads CSRF token from the LinkedIn JSESSIONID cookie. */
+export const getCsrfToken = (): string | null => {
+  const match = document.cookie.match(/JSESSIONID=(?:"([^"]+)"|([^;]+))/);
+  return match?.[1] ?? match?.[2] ?? null;
+};

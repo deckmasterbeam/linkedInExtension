@@ -1,17 +1,17 @@
 // Content script — injected into linkedin.com pages
 // Has access to the page DOM but runs in an isolated JS world.
 import { resolveImage } from "../shared/profileCache";
-import { fetchProfileData } from "../shared/profileFetcher";
 import { injectStyles, renderPopup, hidePopup } from "./hoverPopup";
 import { loadExtensionState, normalizeProfileUrl, isSuppressedLink } from "../shared/helpers";
 import { getViewerUsername } from "../shared/viewerCache";
+import { fetchProfileData } from "../shared/profileFetcher";
 
 const HIGHLIGHT_ATTR = "data-li-ext-highlighted";
 const PROFILE_LINK_SELECTOR = `a[href^="https://www.linkedin.com/in/"], a[href^="/in/"]`;
 
 /** The canonical URL of the profile page currently being viewed, or null if
  *  this is not a profile page. Used to skip popups on self-referencing links. */
-const currentPageProfileUrl = normalizeProfileUrl(location.href);
+const getCurrentPageProfileUrl = (): string | null => normalizeProfileUrl(location.href);
 
 /** Extract profile picture from the live page DOM surrounding the link. */
 const extractImgFromDOM = (link: HTMLAnchorElement): string | null => {
@@ -45,7 +45,7 @@ document.addEventListener("mouseover", async (e) => {
 
   clearTimeout(hoverTimer);
   const profileUrl = normalizeProfileUrl(link.href);
-  if (!profileUrl || isSuppressedLink(link, currentPageProfileUrl)) {
+  if (!profileUrl || isSuppressedLink(link, getCurrentPageProfileUrl())) {
     return;
   }
   currentHoverUrl = profileUrl;
@@ -112,7 +112,7 @@ export const applyHighlight = (): void => {
   );
   els.forEach((el) => {
     const profileUrl = normalizeProfileUrl(el.href);
-    if (!profileUrl || isSuppressedLink(el, currentPageProfileUrl)) {
+    if (!profileUrl || isSuppressedLink(el, getCurrentPageProfileUrl())) {
       return;
     }
     el.style.backgroundColor = "#cce5ff";
