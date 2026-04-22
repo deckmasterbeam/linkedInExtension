@@ -2,6 +2,7 @@ import "./viewer.css";
 import { type StoredProfile, STORAGE_PREFIX } from "../shared/profileCache";
 import { renderProfileContent } from "../shared/profileCard";
 import { resolveImageBuffer } from "../shared/imageCache";
+import { loadExtensionState } from "../shared/helpers";
 
 const objectUrlCache = new Map<string, string>();
 
@@ -78,10 +79,13 @@ const renderCard = async (
 const init = async (): Promise<void> => {
   const grid = document.getElementById("grid") as HTMLElement;
   const emptyMsg = document.getElementById("empty") as HTMLElement;
+  const { devMode } = await loadExtensionState();
 
   const entries = await loadAll();
 
-  console.log("Loaded profiles from storage:", entries);
+  if (devMode) {
+    console.log("Loaded profiles from storage:", entries);
+  }
 
   if (entries.length === 0) {
     emptyMsg.style.display = "block";

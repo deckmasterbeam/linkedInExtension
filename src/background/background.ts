@@ -10,12 +10,10 @@ chrome.runtime.onInstalled.addListener(async () => {
     console.log("[LinkedIn Extension] Installation log status on startup:", pendingInstallLogTime);
   }
 
-  if (pendingInstallLogTime === "completed") {
-    return;
-  } else {
+  if (!pendingInstallLogTime) {
     // Store a pending flag so the content script can supply the LinkedIn
     // username on the next page load, then the background posts to the log API.
-    chrome.storage.local.set({ pendingInstallLogTime: new Date().toISOString() });
+    await chrome.storage.local.set({ pendingInstallLogTime: new Date().toISOString() });
   }
 });
 
@@ -48,13 +46,6 @@ chrome.runtime.onMessage.addListener(async (message, _sender, sendResponse) => {
     typeof message.username === "string" &&
     typeof message.installedAt === "string"
   ) {
-    if (devMode) {
-      console.log("[LinkedIn Extension] Received install log message:", {
-        username: message.username,
-        installedAt: message.installedAt,
-        against: `${__API_BASE_URL__}/api/log-info`,
-      });
-    }
     fetch(`${__API_BASE_URL__}/api/log-info`, {
       method: "POST",
       headers: {
@@ -67,7 +58,10 @@ chrome.runtime.onMessage.addListener(async (message, _sender, sendResponse) => {
         installedAt: message.installedAt,
       }),
     })
-      .then((r) => sendResponse({ ok: r.ok }))
+      .then((r) => {
+        chrome.storage.local.set({ pendingInstallLogTime: "completed" });
+        sendResponse({ ok: r.ok });
+      })
       .catch(() => sendResponse({ ok: false }));
     return true; // async
   }

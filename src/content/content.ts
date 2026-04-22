@@ -158,15 +158,11 @@ export const maybeLogInstall = async (): Promise<void> => {
   if (!username) {
     return;
   }
-  const response = (await chrome.runtime.sendMessage({
+  await chrome.runtime.sendMessage({
     type: "logInstall",
     username,
     installedAt: pendingInstallLogTime,
-  })) as { ok: boolean } | undefined;
-
-  if (response?.ok) {
-    await chrome.storage.local.set({ pendingInstallLogTime: "completed" });
-  }
+  });
 };
 
 // ── Init ──────────────────────────────────────────────────────────────────────

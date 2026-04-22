@@ -306,23 +306,14 @@ const fetchViaVoyager = async (
     });
 
     if (!response.ok) {
-      if (devMode) {
-        console.log(`[LinkedIn Extension] Voyager memberIdentity failed: HTTP ${response.status}`);
-      }
       return null;
     }
 
     const parsed = parseVoyagerProfile(await response.json(), imgSrc);
     if (parsed) {
-      if (devMode) {
-        console.log("[LinkedIn Extension] Voyager memberIdentity succeeded");
-      }
       return parsed;
     }
 
-    if (devMode) {
-      console.log("[LinkedIn Extension] Voyager memberIdentity had no parseable profile");
-    }
     return null;
   } catch {
     return null;
@@ -352,9 +343,6 @@ const fetchViaHtmlParsing = async (
     }
 
     const html = await resp.text();
-    if (devMode) {
-      console.log(`[LinkedIn Extension] Fetched profile HTML for ${profileUrl}:\n`, html);
-    }
     const doc = new DOMParser().parseFromString(html, "text/html");
 
     // Name is always in <title> as "First Last | LinkedIn"
