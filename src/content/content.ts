@@ -148,7 +148,7 @@ export const maybeLogInstall = async (): Promise<void> => {
   if (devMode) {
     console.log("[LinkedIn Extension] Pending install log time:", pendingInstallLogTime);
   }
-  if (!pendingInstallLogTime) {
+  if (!pendingInstallLogTime || pendingInstallLogTime === "completed") {
     return;
   }
   const username = await getViewerUsername();
