@@ -34,7 +34,7 @@ let currentHoverUrl: string | null = null;
 let hoverTimer: number | undefined;
 
 document.addEventListener("mouseover", async (e) => {
-  const { popupsEnabled } = await loadExtensionState();
+  const { popupsEnabled, profileViewLogging } = await loadExtensionState();
   if (!popupsEnabled) {
     return;
   }
@@ -79,13 +79,15 @@ document.addEventListener("mouseover", async (e) => {
 
       const viewedUsername = usernameFromProfileUrl(profileUrl);
       if (viewerUsername && viewedUsername && data.isConnection !== null) {
-        void chrome.runtime.sendMessage({
-          type: "logProfileView",
-          viewerUsername,
-          viewedUsername,
-          isConnected: data.isConnection,
-          viewedAt: new Date().toISOString(),
-        });
+        if (profileViewLogging) {
+          void chrome.runtime.sendMessage({
+            type: "logProfileView",
+            viewerUsername,
+            viewedUsername,
+            isConnected: data.isConnection,
+            viewedAt: new Date().toISOString(),
+          });
+        }
       }
     } catch {
       if (currentHoverUrl === profileUrl) {

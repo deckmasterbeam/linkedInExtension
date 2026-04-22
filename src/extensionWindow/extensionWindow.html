@@ -17,7 +17,7 @@
         <div class="section" id="main-section" style="display: none">
           <div class="row">
             <div class="row-label">
-              <span class="row-title">Hover Popups</span>
+              <span class="row-title">Profile Popups</span>
               <span class="row-desc">Show profile cards on hover</span>
             </div>
             <label class="switch">
@@ -27,11 +27,24 @@
           </div>
         </div>
 
+        <div class="section" id="main-section">
+          <div class="row">
+            <div class="row-label">
+              <span class="row-title">Profile View Telemetry</span>
+              <span class="row-desc">This telemetry helps improve profile data extraction</span>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="profile-view-logging-toggle" />
+              <span class="switch-track"></span>
+            </label>
+          </div>
+        </div>
+
         <div class="section" id="highlight-section" style="display: none">
           <div class="row">
             <div class="row-label">
               <span class="row-title">Highlighting</span>
-              <span class="row-desc">Highlight profile links in blue</span>
+              <span class="row-desc">Highlight profile links in blue (debugging feature)</span>
             </div>
             <label class="switch">
               <input type="checkbox" id="highlight-toggle" />
@@ -44,7 +57,7 @@
           <div class="row">
             <div class="row-label">
               <span class="row-title">View Profile Cache</span>
-              <span class="row-desc">View cached profile data</span>
+              <span class="row-desc">View cached profile data (debugging feature)</span>
             </div>
             <button id="view-cache-btn" class="btn view-profile-cache">View</button>
           </div>

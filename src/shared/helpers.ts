@@ -2,6 +2,7 @@ type ExtensionState = {
   devMode: boolean;
   popupsEnabled: boolean;
   highlighting: boolean;
+  profileViewLogging: boolean;
   pendingInstallLogTime: string | null;
 };
 
@@ -10,6 +11,7 @@ export const loadExtensionState = async (): Promise<ExtensionState> => {
     "devMode",
     "popupsEnabled",
     "highlighting",
+    "profileViewLogging",
     "pendingInstallLogTime",
   ]);
   if (result.devMode === undefined) {
@@ -21,10 +23,14 @@ export const loadExtensionState = async (): Promise<ExtensionState> => {
   if (result.highlighting === undefined) {
     chrome.storage.local.set({ highlighting: false });
   }
+  if (result.profileViewLogging === undefined) {
+    chrome.storage.local.set({ profileViewLogging: false });
+  }
   return {
     devMode: result.devMode ?? false,
     popupsEnabled: result.popupsEnabled ?? true,
     highlighting: result.highlighting ?? false,
+    profileViewLogging: result.profileViewLogging ?? false,
     pendingInstallLogTime: result.pendingInstallLogTime ?? null,
   };
 };

@@ -240,6 +240,7 @@ describe("loadExtensionState", () => {
       devMode: true,
       popupsEnabled: false,
       highlighting: true,
+      profileViewLogging: false,
       pendingInstallLogTime: null,
     });
   });
@@ -293,7 +294,12 @@ describe("loadExtensionState", () => {
   });
 
   it("does not write defaults when all values are already stored", async () => {
-    storageMock.get.mockResolvedValue({ devMode: false, popupsEnabled: true, highlighting: false });
+    storageMock.get.mockResolvedValue({
+      devMode: false,
+      popupsEnabled: true,
+      highlighting: false,
+      profileViewLogging: false,
+    });
 
     await loadExtensionState();
 

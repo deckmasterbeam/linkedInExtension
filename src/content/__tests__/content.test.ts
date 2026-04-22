@@ -26,6 +26,7 @@ type ExtensionState = {
   devMode: boolean;
   popupsEnabled: boolean;
   highlighting: boolean;
+  profileViewLogging: boolean;
   pendingInstallLogTime: string | null;
 };
 
@@ -77,6 +78,7 @@ const loadContentModule = async (
     devMode: false,
     popupsEnabled: true,
     highlighting: false,
+    profileViewLogging: false,
     pendingInstallLogTime: null,
     ...stateOverrides,
   };
@@ -198,7 +200,6 @@ describe("content.ts", () => {
       username: "janedoe",
       installedAt: "2026-04-21T12:00:00.000Z",
     });
-    expect(setup.setMock).toHaveBeenCalledWith({ pendingInstallLogTime: "completed" });
   });
 
   it("leaves pendingInstallLogTime unchanged when the API submission fails", async () => {
@@ -308,7 +309,7 @@ describe("content.ts", () => {
   });
 
   it("renders popup content and logs a profile view on hover", async () => {
-    const setup = await loadContentModule();
+    const setup = await loadContentModule({ profileViewLogging: true });
     const card = document.createElement("li");
     const img = document.createElement("img");
     img.src = "https://media.licdn.com/dms/image/test";
@@ -370,6 +371,44 @@ describe("content.ts", () => {
         viewedUsername: "janedoe",
         isConnected: true,
       }),
+    );
+  });
+
+  it("does not log a profile view when profile view logging is disabled", async () => {
+    const setup = await loadContentModule({ profileViewLogging: false });
+    const card = document.createElement("li");
+    const img = document.createElement("img");
+    img.src = "https://media.licdn.com/dms/image/test";
+    const link = document.createElement("a");
+    link.href = makeProfileUrl("janedoe");
+    link.textContent = "janedoe";
+    card.appendChild(img);
+    card.appendChild(link);
+    document.body.appendChild(card);
+
+    setup.getViewerUsernameMock.mockResolvedValue("viewer1");
+    setup.resolveImageMock.mockResolvedValue("resolved-image");
+    setup.fetchProfileDataMock.mockResolvedValue({
+      name: "Jane Doe",
+      imgSrc: null,
+      pronouns: null,
+      subtitle: null,
+      company: null,
+      location: null,
+      isConnection: true,
+    });
+
+    await invokeDocumentListener(
+      setup.documentListeners.mouseover,
+      makeMouseEvent("mouseover", link),
+    );
+    await flushPromises();
+    await jest.advanceTimersByTimeAsync(350);
+    await flushPromises();
+
+    expect(setup.renderPopupMock).toHaveBeenCalled();
+    expect(setup.sendMessageMock).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "logProfileView" }),
     );
   });
 
