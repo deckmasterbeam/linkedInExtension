@@ -8,7 +8,15 @@ This in development chrome extension injects profile popups into profile links o
 
 I've always been curious about the degree to which data can be cached on the user's side to save on network traffic. It feels like devs take network requests for granted on data that tends to be mostly static over time. In the spirit of making only what network requests are necessary, this extension caches profile hits for 7 days. Something I was also curious about was caching images on the user's side. So images are also cached in blob storage.
 
-## Loading into Chrome
+## Loading into Chrome (user)
+
+1. Download the dist file
+2. Unzip it
+3. Open `chrome://extensions`
+4. Enable **Developer mode** (toggle, top right)
+5. Click **Load unpacked** → select the `dist/` folder
+
+## Loading into Chrome (dev)
 
 1. Run `npm run build`
 2. Open `chrome://extensions`
@@ -19,10 +27,10 @@ After making changes, run `npm run build` again and click the refresh icon on th
 
 ## Future Work
 
-- Figure out how to publish this on the chrome store
+- Publish this on the chrome store
 
-- Write a post on linkedIn about this
+- Support companies too
 
-- LinkedIn supported this behavior for companies too
+## Privacy Policy
 
-- log connections to database
+[Privacy policy](PRIVACY_POLICY.md)
